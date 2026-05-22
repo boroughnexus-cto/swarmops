@@ -93,6 +93,12 @@ type poolDelta struct {
 
 // ─── PoolSlot ────────────────────────────────────────────────────────────────
 
+// selfTestTimeout bounds how long a freshly-spawned slot has to complete its
+// initial ping before we give up. Was 15s — too aggressive when Claude Code
+// init + MCP config loading + first round-trip to Anthropic happens under
+// concurrent load. 45s gives the boot path real headroom.
+const selfTestTimeout = 45 * time.Second
+
 // PoolSlot represents a single warm Claude CLI session.
 type PoolSlot struct {
 	ID         string
@@ -111,6 +117,12 @@ type PoolSlot struct {
 	totalCost      float64
 	totalRequests  int64
 	rateLimitUntil time.Time
+
+	// Recycle backoff — exponential retry when self-test fails to keep us
+	// from hammering Anthropic with constant respawn attempts on a degraded
+	// pool. Reset to zero on a successful spawn.
+	recycleFailures int
+	nextRecycleAt   time.Time
 }
 
 // sendQuery writes a user message to the Claude CLI's stdin.
@@ -376,7 +388,7 @@ func (pm *PoolManager) selfTest(slot *PoolSlot) error {
 		return fmt.Errorf("send: %w", err)
 	}
 
-	deadline := time.After(15 * time.Second)
+	deadline := time.After(selfTestTimeout)
 	for {
 		evCh := make(chan poolEvent, 1)
 		errCh := make(chan error, 1)
@@ -401,7 +413,7 @@ func (pm *PoolManager) selfTest(slot *PoolSlot) error {
 		case err := <-errCh:
 			return fmt.Errorf("read: %w", err)
 		case <-deadline:
-			return fmt.Errorf("timeout after 15s")
+			return fmt.Errorf("timeout after %v", selfTestTimeout)
 		}
 	}
 }
@@ -457,6 +469,9 @@ func (pm *PoolManager) Release(slot *PoolSlot) {
 }
 
 // recycleSlot kills a dead slot and spawns a replacement.
+// On spawn failure, schedules the next attempt with exponential backoff so a
+// degraded pool (rate limits, system overload) doesn't trigger a tight respawn
+// loop. Backoff bounds come from pm.config.BackoffBase / BackoffMax.
 func (pm *PoolManager) recycleSlot(slot *PoolSlot) {
 	model := slot.Model
 	slotID := slot.ID
@@ -465,15 +480,31 @@ func (pm *PoolManager) recycleSlot(slot *PoolSlot) {
 	log.Printf("pool: recycling %s", slotID)
 	newSlot, err := pm.spawnSlot(model, slotID)
 	if err != nil {
-		log.Printf("pool: recycle failed for %s: %v", slotID, err)
-		// Reset to slotDead so the health monitor retries on the next tick.
 		slot.mu.Lock()
+		slot.recycleFailures++
+		// Exponential backoff: base * 2^min(failures-1, 5), capped at BackoffMax.
+		// failures=1 → base, =2 → 2× base, …, =6+ → BackoffMax.
+		shift := slot.recycleFailures - 1
+		if shift < 0 {
+			shift = 0
+		}
+		if shift > 5 {
+			shift = 5
+		}
+		delay := pm.config.BackoffBase * time.Duration(1<<shift)
+		if delay > pm.config.BackoffMax {
+			delay = pm.config.BackoffMax
+		}
+		slot.nextRecycleAt = time.Now().Add(delay)
 		slot.state = slotDead
+		failures := slot.recycleFailures
 		slot.mu.Unlock()
+		log.Printf("pool: recycle failed for %s: %v (failures=%d, next attempt in %v)", slotID, err, failures, delay)
 		return
 	}
 
-	// Replace in slots list
+	// Carry over no failure history — fresh slot starts clean.
+	// (newSlot is a fresh struct from spawnSlot, so recycleFailures is already 0.)
 	pm.replaceSlot(model, slotID, newSlot)
 }
 
@@ -533,13 +564,20 @@ func (pm *PoolManager) checkHealth() {
 			}
 
 			// Retry previously-failed recycles — slot stayed dead after spawn error.
+			// Honour the exponential-backoff timer set by recycleSlot to avoid hammering
+			// a degraded pool / rate-limited account with constant respawn attempts.
 			if state == slotDead {
 				slot.mu.Lock()
 				if slot.state == slotDead { // re-check under lock to avoid double-spawn
+					if !slot.nextRecycleAt.IsZero() && time.Now().Before(slot.nextRecycleAt) {
+						slot.mu.Unlock()
+						continue // still in backoff window
+					}
 					slot.state = slotStarting
 					slot.startedAt = time.Now()
+					failures := slot.recycleFailures
 					slot.mu.Unlock()
-					log.Printf("pool: %s dead slot detected, retrying recycle", slot.ID)
+					log.Printf("pool: %s dead slot detected, retrying recycle (prior failures=%d)", slot.ID, failures)
 					go pm.recycleSlot(slot)
 				} else {
 					slot.mu.Unlock()
@@ -548,12 +586,13 @@ func (pm *PoolManager) checkHealth() {
 
 			// Unstick slots that are in slotStarting but the process is dead (SWM-57).
 			// This happens when a recycle goroutine hangs or the spawned process dies
-			// before self-test completes. After 2× the self-test deadline, reset to dead.
+			// before self-test completes. After 2× the self-test deadline + grace, reset to dead.
 			if state == slotStarting && !alive {
 				slot.mu.Lock()
 				startedAt := slot.startedAt
 				slot.mu.Unlock()
-				if !startedAt.IsZero() && time.Since(startedAt) > 2*time.Minute {
+				stuckThreshold := 2*selfTestTimeout + 30*time.Second
+				if !startedAt.IsZero() && time.Since(startedAt) > stuckThreshold {
 					slot.mu.Lock()
 					if slot.state == slotStarting {
 						slot.state = slotDead
