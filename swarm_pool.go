@@ -123,6 +123,13 @@ type PoolSlot struct {
 	// pool. Reset to zero on a successful spawn.
 	recycleFailures int
 	nextRecycleAt   time.Time
+
+	// Single-flight guard so concurrent checkHealth ticks can't spawn
+	// duplicate recycle goroutines for the same slot. recycleSlot sets this
+	// on entry (returning a no-op if already set) and clears it on exit.
+	// Also tells checkHealth to leave the slot alone — the old cmd being
+	// dead is expected while a recycle is mid-flight.
+	recyclingInProgress bool
 }
 
 // sendQuery writes a user message to the Claude CLI's stdin.
@@ -468,11 +475,44 @@ func (pm *PoolManager) Release(slot *PoolSlot) {
 	}
 }
 
+// nextRecycleDelay returns the exponential-backoff delay for the n'th
+// consecutive recycle failure. failures=1 → BackoffBase, =2 → 2×, …,
+// =6+ → BackoffMax. Centralised so the dead-after-failure path and the
+// stuck-in-starting reset path apply identical backoff curves.
+func (pm *PoolManager) nextRecycleDelay(failures int) time.Duration {
+	shift := failures - 1
+	if shift < 0 {
+		shift = 0
+	}
+	if shift > 5 {
+		shift = 5
+	}
+	delay := pm.config.BackoffBase * time.Duration(1<<shift)
+	if delay > pm.config.BackoffMax {
+		delay = pm.config.BackoffMax
+	}
+	return delay
+}
+
 // recycleSlot kills a dead slot and spawns a replacement.
+// Single-flight: if a recycle is already running for this slot, returns immediately.
 // On spawn failure, schedules the next attempt with exponential backoff so a
 // degraded pool (rate limits, system overload) doesn't trigger a tight respawn
 // loop. Backoff bounds come from pm.config.BackoffBase / BackoffMax.
 func (pm *PoolManager) recycleSlot(slot *PoolSlot) {
+	slot.mu.Lock()
+	if slot.recyclingInProgress {
+		slot.mu.Unlock()
+		return
+	}
+	slot.recyclingInProgress = true
+	slot.mu.Unlock()
+	defer func() {
+		slot.mu.Lock()
+		slot.recyclingInProgress = false
+		slot.mu.Unlock()
+	}()
+
 	model := slot.Model
 	slotID := slot.ID
 	slot.kill()
@@ -482,19 +522,7 @@ func (pm *PoolManager) recycleSlot(slot *PoolSlot) {
 	if err != nil {
 		slot.mu.Lock()
 		slot.recycleFailures++
-		// Exponential backoff: base * 2^min(failures-1, 5), capped at BackoffMax.
-		// failures=1 → base, =2 → 2× base, …, =6+ → BackoffMax.
-		shift := slot.recycleFailures - 1
-		if shift < 0 {
-			shift = 0
-		}
-		if shift > 5 {
-			shift = 5
-		}
-		delay := pm.config.BackoffBase * time.Duration(1<<shift)
-		if delay > pm.config.BackoffMax {
-			delay = pm.config.BackoffMax
-		}
+		delay := pm.nextRecycleDelay(slot.recycleFailures)
 		slot.nextRecycleAt = time.Now().Add(delay)
 		slot.state = slotDead
 		failures := slot.recycleFailures
@@ -585,18 +613,36 @@ func (pm *PoolManager) checkHealth() {
 			}
 
 			// Unstick slots that are in slotStarting but the process is dead (SWM-57).
-			// This happens when a recycle goroutine hangs or the spawned process dies
-			// before self-test completes. After 2× the self-test deadline + grace, reset to dead.
+			//
+			// Two cases produce state=slotStarting && !alive:
+			//   1. recycleSlot is mid-flight — it killed the OLD cmd (so alive()=false
+			//      on the OLD slot) and is now waiting for spawnSlot's selfTest on a
+			//      NEW cmd to complete. State will resolve naturally via replaceSlot
+			//      (success) or recycleSlot's error path (failure with backoff). DO NOT
+			//      interfere: forcing dead here would let the next checkHealth tick
+			//      launch a second concurrent recycle, accumulating ghost processes.
+			//   2. No recycle in flight — something genuinely went wrong (spawn never
+			//      launched, or process died after spawn before any state update). Force
+			//      to dead AND apply backoff so the next retry waits instead of firing
+			//      immediately.
 			if state == slotStarting && !alive {
 				slot.mu.Lock()
+				inFlight := slot.recyclingInProgress
 				startedAt := slot.startedAt
 				slot.mu.Unlock()
+				if inFlight {
+					continue
+				}
 				stuckThreshold := 2*selfTestTimeout + 30*time.Second
 				if !startedAt.IsZero() && time.Since(startedAt) > stuckThreshold {
 					slot.mu.Lock()
-					if slot.state == slotStarting {
+					if slot.state == slotStarting && !slot.recyclingInProgress {
 						slot.state = slotDead
-						log.Printf("pool: %s stuck in starting for >2m with dead process, resetting to dead", slot.ID)
+						slot.recycleFailures++
+						delay := pm.nextRecycleDelay(slot.recycleFailures)
+						slot.nextRecycleAt = time.Now().Add(delay)
+						log.Printf("pool: %s stuck in starting for >%v with dead process, resetting to dead (failures=%d, next attempt in %v)",
+							slot.ID, stuckThreshold, slot.recycleFailures, delay)
 					}
 					slot.mu.Unlock()
 				}
