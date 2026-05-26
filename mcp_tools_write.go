@@ -517,6 +517,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			InputSchema: jsonSchema(map[string]interface{}{
 				"goal":        stringProp("The work to accomplish (1-3 sentences). The brain uses this to pick a repo and the spawned session sees it as the first user message."),
 				"brain_model": stringProp("Optional model the dispatcher uses for the routing decision. Defaults to 'haiku' (fast, cheap, sufficient for ~30-repo catalogues). Pass 'sonnet' for trickier picks, or any LiteLLM-routed id (e.g. 'chatgptsub-gpt-5.5', 'or-deepseek-v4-pro') for a third-party brain — note: third-party brains require a [gpt]/[dseek] worker in the pool; default brains use the pool's claude models."),
+				"backend":     stringProp("Optional inference backend for the spawned session. 'default' (or omit) = Anthropic; 'gpt' = LiteLLM-routed chatgptsub-gpt-5.5 (session auto-prefixed [gpt]); 'dseek' = LiteLLM-routed or-deepseek-v4-pro (session auto-prefixed [dseek]). The brain itself still uses brain_model — this only affects the spawned worker."),
 				"dry_run":     map[string]interface{}{"type": "boolean", "description": "If true, return the brain's decision without spawning a session. Default false."},
 			}, []string{"goal"}),
 		},
@@ -530,6 +531,26 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				brainModel = brainDefaultModel
 			}
 			dryRun := getBoolArg(args, "dry_run", false)
+
+			// Resolve the spawned-session backend. Empty / "default" → no
+			// env overrides; "gpt" / "dseek" → LiteLLM-routed env vars from
+			// backend.go, plus the matching model id so autoPrefixSessionName
+			// adds the [gpt] / [dseek] prefix.
+			backend := strings.ToLower(strings.TrimSpace(getStringArg(args, "backend", "")))
+			var sessionEnv map[string]string
+			var sessionModel string
+			switch backend {
+			case "", "default", "anthropic":
+				// nothing — plain Anthropic
+			case "gpt":
+				sessionModel = litellmModelGPT55
+				sessionEnv = litellmEnvOverrides(sessionModel)
+			case "dseek", "deepseek":
+				sessionModel = litellmModelDeepseek4
+				sessionEnv = litellmEnvOverrides(sessionModel)
+			default:
+				return nil, fmt.Errorf("unknown backend %q (expected: default | gpt | dseek)", backend)
+			}
 
 			repos, err := listKnownRepos(ctx)
 			if err != nil {
@@ -602,11 +623,16 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				if name == "" {
 					name = "newgoal"
 				}
+				// Auto-prefix [gpt] / [dseek] when routing through LiteLLM,
+				// matching the TUI picker + swop_run_task behaviour. No-op for
+				// the default backend (sessionEnv is nil).
+				name = autoPrefixSessionName(name, sessionModel, sessionEnv)
 				missionStr := goal
-				sess, err := svc.RunTask(ctx, name, matched.LocalPath, nil, nil, &missionStr, "", "", goal, nil)
+				sess, err := svc.RunTask(ctx, name, matched.LocalPath, nil, nil, &missionStr, sessionModel, "", goal, sessionEnv)
 				if err != nil {
 					return nil, fmt.Errorf("spawn session: %w", err)
 				}
+				result["backend"] = backend
 				// Inject `/goal <goal>` asynchronously after Claude has had a
 				// chance to start up and clear the workspace-trust prompt.
 				// The slash command sets a session-scoped Stop hook so claude
