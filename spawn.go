@@ -137,9 +137,39 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 			model = m
 		}
 	}
+
+	// Pop the magic MCP-restrict key out of envOverrides so it never reaches
+	// the spawned process. Resolution happens after createSession because we
+	// need the session id to name the per-session config file.
+	var mcpRestrict []string
+	if envOverrides != nil {
+		if v, ok := envOverrides[swarmopsMCPRestrictKey]; ok {
+			for _, name := range strings.Split(v, ",") {
+				name = strings.TrimSpace(name)
+				if name != "" {
+					mcpRestrict = append(mcpRestrict, name)
+				}
+			}
+			delete(envOverrides, swarmopsMCPRestrictKey)
+		}
+	}
+
 	s, err := createSession(ctx, name, directory, contextID, contextName, mission, false, model, profile, worktreePath, gitBranch, repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
+	}
+
+	if len(mcpRestrict) > 0 {
+		var unknown []string
+		var rerr error
+		envOverrides, unknown, rerr = applyMCPRestriction(s.ID, mcpRestrict, envOverrides)
+		if rerr != nil {
+			deleteSession(ctx, s.ID)
+			return nil, fmt.Errorf("mcp restriction: %w", rerr)
+		}
+		if len(unknown) > 0 {
+			log.Printf("spawn: session %s: ignored unknown MCP servers: %s", s.ID, strings.Join(unknown, ","))
+		}
 	}
 
 	var sessionCmd []string

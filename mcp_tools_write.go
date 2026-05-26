@@ -29,6 +29,11 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 					"description": "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
 					"additionalProperties": map[string]interface{}{"type": "string"},
 				},
+				"mcp_servers": map[string]interface{}{
+					"type":        "array",
+					"description": "Optional subset of MCP server names (from ~/.swarmops/mcp-config.json) to load in the session. Omit/empty = the default ~50-server catalogue (large; ~300k tokens of system+tools). Set to a small focused list (e.g. ['tkn-plane','tkn-komodo']) for [gpt]/[dseek] sessions to keep the system prompt tiny so DeepSeek/GPT-5.5 don't burn context. Implemented via --strict-mcp-config + a per-session config file.",
+					"items":       map[string]interface{}{"type": "string"},
+				},
 			}, nil),
 		},
 		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
@@ -53,6 +58,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				contextName = &ctxNameStr
 			}
 			envOverrides := getStringMapArg(args, "env_overrides")
+			envOverrides = stashMCPServers(args, envOverrides)
 
 			// Auto-prepend [gpt] or [dseek] prefix when routing to a non-Anthropic backend.
 			// Pick the prefix from ANTHROPIC_MODEL first (the explicit signal), falling
@@ -91,6 +97,11 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 					"type":        "object",
 					"description": "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
 					"additionalProperties": map[string]interface{}{"type": "string"},
+				},
+				"mcp_servers": map[string]interface{}{
+					"type":        "array",
+					"description": "Optional subset of MCP server names (from ~/.swarmops/mcp-config.json) to load in the session. Omit/empty = full catalogue (~50 servers, ~300k tokens). Use a small focused list for [gpt]/[dseek] agents to keep the system prompt tiny.",
+					"items":       map[string]interface{}{"type": "string"},
 				},
 			}, []string{"repo_path"}),
 		},
@@ -137,6 +148,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				contextName = &ctxNameStr
 			}
 			envOverrides := getStringMapArg(args, "env_overrides")
+			envOverrides = stashMCPServers(args, envOverrides)
 
 			// Auto-prepend [gpt] or [dseek] prefix when routing to a non-Anthropic backend.
 			// Pick the prefix from ANTHROPIC_MODEL first (the explicit signal), falling
@@ -518,6 +530,11 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"goal":        stringProp("The work to accomplish (1-3 sentences). The brain uses this to pick a repo and the spawned session sees it as the first user message."),
 				"brain_model": stringProp("Optional model the dispatcher uses for the routing decision. Defaults to 'haiku' (fast, cheap, sufficient for ~30-repo catalogues). Pass 'sonnet' for trickier picks, or any LiteLLM-routed id (e.g. 'chatgptsub-gpt-5.5', 'or-deepseek-v4-pro') for a third-party brain — note: third-party brains require a [gpt]/[dseek] worker in the pool; default brains use the pool's claude models."),
 				"backend":     stringProp("Optional inference backend for the spawned session. 'default' (or omit) = Anthropic; 'gpt' = LiteLLM-routed chatgptsub-gpt-5.5 (session auto-prefixed [gpt]); 'dseek' = LiteLLM-routed or-deepseek-v4-pro (session auto-prefixed [dseek]). The brain itself still uses brain_model — this only affects the spawned worker."),
+				"mcp_servers": map[string]interface{}{
+					"type":        "array",
+					"description": "Optional subset of MCP server names to load in the spawned session. Recommended for backend='gpt'/'dseek' so the session boots with a tiny tool surface (~5k tokens) instead of the full ~50-server catalogue (~300k tokens). Example: ['tkn-plane','tkn-komodo','tkn-firecrawl'].",
+					"items":       map[string]interface{}{"type": "string"},
+				},
 				"dry_run":     map[string]interface{}{"type": "boolean", "description": "If true, return the brain's decision without spawning a session. Default false."},
 			}, []string{"goal"}),
 		},
@@ -627,6 +644,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				// matching the TUI picker + swop_run_task behaviour. No-op for
 				// the default backend (sessionEnv is nil).
 				name = autoPrefixSessionName(name, sessionModel, sessionEnv)
+				// Forward an optional mcp_servers subset so the spawned
+				// session loads only those tools — crucial for [gpt]/[dseek]
+				// to keep the system prompt under control.
+				sessionEnv = stashMCPServers(args, sessionEnv)
 				missionStr := goal
 				sess, err := svc.RunTask(ctx, name, matched.LocalPath, nil, nil, &missionStr, sessionModel, "", goal, sessionEnv)
 				if err != nil {
