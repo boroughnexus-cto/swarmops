@@ -85,10 +85,12 @@ func injectRestorePrompt(s Session, delay time.Duration) {
 
 func buildClaudeRestoreArgs(ctx context.Context, s *Session) []string {
 	args := []string{"happier", "--yolo"}
-	// Happier session IDs are not UUIDs; skip old UUID-format IDs from the pre-happier era.
-	if s.ClaudeSessionID != nil && *s.ClaudeSessionID != "" && !isValidUUID(*s.ClaudeSessionID) {
-		args = append(args, "--existing-session", *s.ClaudeSessionID)
-	}
+	// We don't pass --existing-session for the same reason as
+	// resumeClaudeCmd: happier needs an attach-secret we don't persist and
+	// crashes with "missing session attach secret" otherwise, taking the
+	// tmux window down with it. A fresh happier wrapper is fine — the
+	// claude conversation history is still on disk under
+	// ~/.claude/projects/<workdir>/ and can be resumed via /resume.
 	args = append(args, profileToHappierArgs(s.Profile)...)
 	// Model is passed via ANTHROPIC_MODEL in restoreEnvFor — happier's --model
 	// flag triggers a hook-file race that kills the spawned claude.

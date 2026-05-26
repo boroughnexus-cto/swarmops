@@ -236,7 +236,18 @@ func (s *Services) StartSession(ctx context.Context, id string) error {
 			claudeID = *sess.ClaudeSessionID
 		}
 		cArgs := resumeClaudeCmd(claudeID, sess.Model)
-		args := append([]string{"new-session", "-d", "-s", sess.TmuxSession, "-c", dir, "-x", "200", "-y", "50", "--"}, cArgs...)
+		// Use the same env-injection path as restore.go: ANTHROPIC_MODEL
+		// always set, plus the LiteLLM endpoint env when the session was
+		// originally spawned through LiteLLM (name has [gpt]/[dseek]
+		// prefix). Without this, resumed [gpt]/[dseek] sessions try to
+		// call api.anthropic.com with a chatgptsub/openrouter model id
+		// and die — see Model hoist in spawn.go for the matching fix.
+		args := []string{"new-session", "-d", "-s", sess.TmuxSession, "-c", dir, "-x", "200", "-y", "50"}
+		for k, v := range restoreEnvFor(sess) {
+			args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+		}
+		args = append(args, "--")
+		args = append(args, cArgs...)
 		if out, err := exec.Command("tmux", args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to recreate tmux session: %s", strings.TrimSpace(string(out)))
 		}

@@ -2507,7 +2507,10 @@ func runTUI(api swarmClient) error {
 
 // resumeClaudeCmd returns the command args for restarting a session.
 // Uses happier when available; falls back to claude otherwise.
-// For happier: non-UUID IDs are resumed via --existing-session; UUID IDs (pre-happier) start fresh.
+// For happier: starts a fresh wrapper each time. We don't pass
+// `--existing-session` because happier needs a "session attach secret"
+// to resume that we don't persist — passing the session id alone crashes
+// happier ("missing session attach secret") and kills the tmux window.
 // For claude: UUID IDs are resumed via --resume; non-UUID IDs (happier-era) start fresh.
 //
 // For happier we set ANTHROPIC_MODEL via an `env` prefix instead of passing
@@ -2516,9 +2519,6 @@ func runTUI(api swarmClient) error {
 func resumeClaudeCmd(claudeID, model string) []string {
 	if happierAvailable() {
 		args := []string{"env", "ANTHROPIC_MODEL=" + effectiveModel(model), "happier", "--yolo"}
-		if claudeID != "" && !isValidUUID(claudeID) {
-			args = append(args, "--existing-session", claudeID)
-		}
 		return args
 	}
 	// claude fallback

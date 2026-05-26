@@ -126,6 +126,17 @@ func happierAvailable() bool {
 // envOverrides injects extra environment variables into the tmux session via -e flags.
 // Pass nil to inherit the swarmops process environment unchanged (default behavior).
 func spawnSession(ctx context.Context, name, directory string, contextID, contextName, mission *string, model, profile string, worktreePath, gitBranch, repoPath *string, envOverrides map[string]string) (*Session, error) {
+	// If the caller specified ANTHROPIC_MODEL via env_overrides but no
+	// explicit `model` arg, hoist it onto the session record. Without this,
+	// LiteLLM-routed sessions (spawned with env_overrides only) end up with
+	// Model="" in the DB — restore.go then falls back to effectiveModel("")
+	// which is "sonnet", not the LiteLLM target. See bug: [dseek] sessions
+	// failing to come back after a swarmops restart.
+	if model == "" && envOverrides != nil {
+		if m, ok := envOverrides["ANTHROPIC_MODEL"]; ok && m != "" {
+			model = m
+		}
+	}
 	s, err := createSession(ctx, name, directory, contextID, contextName, mission, false, model, profile, worktreePath, gitBranch, repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
