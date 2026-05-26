@@ -103,9 +103,15 @@ func profileToHappierArgs(profile string) []string {
 	return []string{"--profile", profile}
 }
 
-// spawnSession creates a new tmux session and launches happier inside it.
-// Sessions are launched via happier (--yolo) so they are visible in the happier
-// mobile app for remote control, regardless of the underlying LLM backend.
+// happierAvailable returns true if the happier binary is in PATH.
+func happierAvailable() bool {
+	_, err := exec.LookPath("happier")
+	return err == nil
+}
+
+// spawnSession creates a new tmux session and launches happier (or claude as fallback) inside it.
+// When happier is installed, sessions are launched via happier (--yolo) so they are visible in
+// the happier mobile app. When happier is not in PATH, falls back to claude directly.
 // An optional profile string selects a happier backend profile (e.g. "deepseek", "openai").
 // An optional model string selects a specific model within the profile.
 // worktreePath, gitBranch, and repoPath are optional; pass nil for plain sessions.
@@ -117,14 +123,26 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	// Snapshot existing happier sessions before spawn so we can identify the new one.
-	preSpawnIDs := listHappierSessionIDs()
+	var sessionCmd []string
+	var preSpawnIDs map[string]bool
+	var claudeUUID string
+	useHappier := happierAvailable()
 
-	// Launch happier instead of claude directly. --yolo = --dangerously-skip-permissions.
-	// Profile flag routes to a non-Anthropic backend (deepseek, openai, gemini, etc.).
-	happierArgs := []string{"happier", "--yolo"}
-	happierArgs = append(happierArgs, profileToHappierArgs(profile)...)
-	happierArgs = append(happierArgs, "--model", effectiveModel(model))
+	if useHappier {
+		preSpawnIDs = listHappierSessionIDs()
+		sessionCmd = []string{"happier", "--yolo"}
+		sessionCmd = append(sessionCmd, profileToHappierArgs(profile)...)
+		sessionCmd = append(sessionCmd, "--model", effectiveModel(model))
+	} else {
+		// Fall back to launching claude directly with a persisted --session-id.
+		claudeUUID = generateUUID()
+		sessionCmd = []string{"claude", "--session-id", claudeUUID, "--dangerously-skip-permissions"}
+		if model != "" {
+			sessionCmd = append(sessionCmd, "--model", model)
+		}
+		log.Printf("spawn: happier not found in PATH — falling back to claude for session %q", name)
+	}
+
 	tmuxArgs := []string{"new-session", "-d",
 		"-s", s.TmuxSession,
 		"-c", directory,
@@ -134,25 +152,32 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 		tmuxArgs = append(tmuxArgs, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 	tmuxArgs = append(tmuxArgs, "--")
-	tmuxArgs = append(tmuxArgs, happierArgs...)
-	cmd := exec.Command("tmux", tmuxArgs...)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	tmuxArgs = append(tmuxArgs, sessionCmd...)
+	if out, err := exec.Command("tmux", tmuxArgs...).CombinedOutput(); err != nil {
 		deleteSession(ctx, s.ID)
 		return nil, fmt.Errorf("tmux new-session: %v: %s", err, out)
 	}
 
-	// Discover the happier session ID and set the session title in the mobile app.
-	if happierID := discoverNewHappierSession(preSpawnIDs, 10*time.Second); happierID != "" {
-		if name != "" {
-			exec.Command("happier", "session", "set-title", happierID, name).Run()
+	if useHappier {
+		// Discover the happier session ID and set the session title in the mobile app.
+		if happierID := discoverNewHappierSession(preSpawnIDs, 10*time.Second); happierID != "" {
+			if name != "" {
+				exec.Command("happier", "session", "set-title", happierID, name).Run()
+			}
+			if err := updateClaudeSessionID(ctx, s.ID, happierID); err != nil {
+				log.Printf("spawn: failed to store happier session ID for %s: %v", s.ID, err)
+			}
+			s.ClaudeSessionID = &happierID
+			log.Printf("spawn: created session %q (tmux=%s, dir=%s, happier=%s, model=%s, profile=%s)", name, s.TmuxSession, directory, happierID, model, profile)
+		} else {
+			log.Printf("spawn: created session %q (tmux=%s, dir=%s, model=%s, profile=%s) — happier ID discovery timed out", name, s.TmuxSession, directory, model, profile)
 		}
-		if err := updateClaudeSessionID(ctx, s.ID, happierID); err != nil {
-			log.Printf("spawn: failed to store happier session ID for %s: %v", s.ID, err)
-		}
-		s.ClaudeSessionID = &happierID
-		log.Printf("spawn: created session %q (tmux=%s, dir=%s, happier=%s, model=%s, profile=%s)", name, s.TmuxSession, directory, happierID, model, profile)
 	} else {
-		log.Printf("spawn: created session %q (tmux=%s, dir=%s, model=%s, profile=%s) — happier session ID discovery timed out", name, s.TmuxSession, directory, model, profile)
+		if err := updateClaudeSessionID(ctx, s.ID, claudeUUID); err != nil {
+			log.Printf("spawn: failed to store claude session ID for %s: %v", s.ID, err)
+		}
+		s.ClaudeSessionID = &claudeUUID
+		log.Printf("spawn: created session %q (tmux=%s, dir=%s, claude=%s, model=%s) [claude fallback]", name, s.TmuxSession, directory, claudeUUID, model)
 	}
 
 	return s, nil

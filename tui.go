@@ -2487,14 +2487,26 @@ func runTUI(api swarmClient) error {
 	return err
 }
 
-// resumeClaudeCmd returns the happier command args for restarting a session.
-// If a happier session ID is available (non-UUID format), uses --existing-session.
-// Old UUID-format IDs (pre-happier) are silently ignored and a fresh session starts.
+// resumeClaudeCmd returns the command args for restarting a session.
+// Uses happier when available; falls back to claude otherwise.
+// For happier: non-UUID IDs are resumed via --existing-session; UUID IDs (pre-happier) start fresh.
+// For claude: UUID IDs are resumed via --resume; non-UUID IDs (happier-era) start fresh.
 func resumeClaudeCmd(claudeID, model string) []string {
-	args := []string{"happier", "--yolo"}
-	if claudeID != "" && !isValidUUID(claudeID) {
-		args = append(args, "--existing-session", claudeID)
+	if happierAvailable() {
+		args := []string{"happier", "--yolo"}
+		if claudeID != "" && !isValidUUID(claudeID) {
+			args = append(args, "--existing-session", claudeID)
+		}
+		args = append(args, "--model", effectiveModel(model))
+		return args
 	}
-	args = append(args, "--model", effectiveModel(model))
+	// claude fallback
+	args := []string{"claude", "--dangerously-skip-permissions"}
+	if claudeID != "" && isValidUUID(claudeID) {
+		args = append(args, "--resume", claudeID)
+	}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
 	return args
 }
