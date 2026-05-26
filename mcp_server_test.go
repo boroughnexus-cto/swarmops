@@ -161,16 +161,16 @@ func TestHandleRequest_ToolsList(t *testing.T) {
 		t.Errorf("expected at least 20 tools, got %d", len(tools))
 	}
 
-	// Verify rc_health_check exists
+	// Verify swop_health_check exists
 	found := false
 	for _, tool := range tools {
-		if tool.Name == "rc_health_check" {
+		if tool.Name == "swop_health_check" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("rc_health_check tool not found in tools list")
+		t.Error("swop_health_check tool not found in tools list")
 	}
 
 	// Verify pool tools are NOT present
@@ -212,7 +212,7 @@ func TestHandleRequest_ToolsCall_HealthCheck(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`5`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"rc_health_check","arguments":{}}`),
+		Params:  json.RawMessage(`{"name":"swop_health_check","arguments":{}}`),
 	}
 
 	resp := server.HandleRequest(context.Background(), req)

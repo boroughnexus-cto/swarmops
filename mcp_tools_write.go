@@ -10,10 +10,10 @@ import (
 
 // registerWriteTools registers all write MCP tools and conditionally pool tools.
 func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) {
-	// ─── rc_run_task ────────────────────────────────────────────────────
+	// ─── swop_run_task ────────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_run_task",
+			Name:        "swop_run_task",
 			Description: "[WRITE] Create and start a new Claude Code session in a tmux window.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"name":         stringProp("Session name (auto-generated if empty)"),
@@ -68,14 +68,14 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_spawn_agent ─────────────────────────────────────────────────
+	// ─── swop_spawn_agent ─────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name: "rc_spawn_agent",
+			Name: "swop_spawn_agent",
 			Description: "[WRITE] Atomically create a git worktree and spawn a Claude Code agent inside it. " +
 				"Writes an optional TASK.md brief before the agent starts. " +
 				"Rolls back the worktree on any failure. " +
-				"Use rc_teardown_agent to clean up when done.",
+				"Use swop_teardown_agent to clean up when done.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"repo_path":     stringProp("Absolute path to the git repository root (required)."),
 				"name":          stringProp("Agent session name (auto-generated if empty). Sessions routed via LiteLLM GPT should use a [gpt] prefix, e.g. '[gpt] my-task'."),
@@ -152,12 +152,12 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_teardown_agent ──────────────────────────────────────────────
+	// ─── swop_teardown_agent ──────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name: "rc_teardown_agent",
+			Name: "swop_teardown_agent",
 			Description: "[WRITE] Tear down an agent session: remove its git worktree, optionally delete the branch, " +
-				"and delete the session record. Safe to call on plain rc_run_task sessions too (skips worktree step). " +
+				"and delete the session record. Safe to call on plain swop_run_task sessions too (skips worktree step). " +
 				"WARNING: delete_branch=true on an unmerged branch will discard uncommitted work.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id":            stringProp("Session ID to tear down."),
@@ -182,10 +182,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_send_input ──────────────────────────────────────────────────
+	// ─── swop_send_input ──────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_send_input",
+			Name:        "swop_send_input",
 			Description: "[WRITE] Send text input to a running session's tmux terminal.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"session_id": stringProp("Session ID to send input to"),
@@ -208,10 +208,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_rename_session ──────────────────────────────────────────────
+	// ─── swop_rename_session ──────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_rename_session",
+			Name:        "swop_rename_session",
 			Description: "[WRITE] Rename a session.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id":   stringProp("Session ID"),
@@ -234,10 +234,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_update_session ──────────────────────────────────────────────
+	// ─── swop_update_session ──────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_update_session",
+			Name:        "swop_update_session",
 			Description: "[WRITE] Update editable session fields: name, mission, directory, profile, context_id/context_name. Only supplied (non-empty) fields are changed. Profile change takes effect on next restart — does not auto-restart the session.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id":           stringProp("Session ID (required)"),
@@ -300,10 +300,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_set_mission ─────────────────────────────────────────────────
+	// ─── swop_set_mission ─────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_set_mission",
+			Name:        "swop_set_mission",
 			Description: "[WRITE] Set or update the mission statement for a session (1-3 sentences).",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id":      stringProp("Session ID"),
@@ -323,10 +323,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_stop_session ────────────────────────────────────────────────
+	// ─── swop_stop_session ────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_stop_session",
+			Name:        "swop_stop_session",
 			Description: "[WRITE] Send interrupt (Ctrl+C) to a running session to stop it.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Session ID"),
@@ -344,10 +344,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_start_session ───────────────────────────────────────────────
+	// ─── swop_start_session ───────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_start_session",
+			Name:        "swop_start_session",
 			Description: "[WRITE] Start or resume a stopped session (re-launches claude in its tmux window).",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Session ID"),
@@ -365,10 +365,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_accept_execution ────────────────────────────────────────────
+	// ─── swop_accept_execution ────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_accept_execution",
+			Name:        "swop_accept_execution",
 			Description: "[WRITE] Accept/acknowledge a completed execution (no-op, returns current state).",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Execution/session ID"),
@@ -383,10 +383,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_delete_execution ────────────────────────────────────────────
+	// ─── swop_delete_execution ────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_delete_execution",
+			Name:        "swop_delete_execution",
 			Description: "[WRITE] Delete a session and kill its tmux window.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Execution/session ID to delete"),
@@ -404,10 +404,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_wait_for_execution ──────────────────────────────────────────
+	// ─── swop_wait_for_execution ──────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_wait_for_execution",
+			Name:        "swop_wait_for_execution",
 			Description: "[READ] Check execution status. Returns current state immediately — poll for updates.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Execution/session ID"),
@@ -422,10 +422,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_git_add ─────────────────────────────────────────────────────
+	// ─── swop_git_add ─────────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_git_add",
+			Name:        "swop_git_add",
 			Description: "[WRITE] Stage files for git commit.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"path":  stringProp("Repository path (default: current directory)"),
@@ -445,10 +445,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_git_commit ──────────────────────────────────────────────────
+	// ─── swop_git_commit ──────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_git_commit",
+			Name:        "swop_git_commit",
 			Description: "[WRITE] Create a git commit with the given message.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"path":    stringProp("Repository path (default: current directory)"),
@@ -469,10 +469,10 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_git_push ────────────────────────────────────────────────────
+	// ─── swop_git_push ────────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_git_push",
+			Name:        "swop_git_push",
 			Description: "[WRITE] Push committed changes to remote.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"path": stringProp("Repository path (default: current directory)"),
@@ -488,11 +488,11 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_repos_refresh ───────────────────────────────────────────────
+	// ─── swop_repos_refresh ───────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_repos_refresh",
-			Description: "[WRITE] Re-scan the local filesystem (under SWARMOPS_REPO_ROOTS, default ~/git-bnx) and GitHub (orgs in SWARMOPS_GITHUB_ORGS, default ThomkerNet+boroughnexus-cto) and upsert every discovered repo into the SwarmOps known_repos registry. Run after cloning a new repo or before invoking rc_newgoal on a fresh deploy.",
+			Name:        "swop_repos_refresh",
+			Description: "[WRITE] Re-scan the local filesystem (under SWARMOPS_REPO_ROOTS, default ~/git-bnx) and GitHub (orgs in SWARMOPS_GITHUB_ORGS, default ThomkerNet+boroughnexus-cto) and upsert every discovered repo into the SwarmOps known_repos registry. Run after cloning a new repo or before invoking swop_newgoal on a fresh deploy.",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
 		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
@@ -508,11 +508,11 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
-	// ─── rc_newgoal ─────────────────────────────────────────────────────
+	// ─── swop_newgoal ─────────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name: "rc_newgoal",
-			Description: "[WRITE] Pick the right repo for a goal via the warm pool brain, then spawn a Claude Code session in that repo's working directory with the goal injected as the first prompt. Replaces 'manually choose directory + run rc_run_task' — eliminates context bloat from agents starting in the wrong tree. " +
+			Name: "swop_newgoal",
+			Description: "[WRITE] Pick the right repo for a goal via the warm pool brain, then spawn a Claude Code session in that repo's working directory with the goal injected as the first prompt. Replaces 'manually choose directory + run swop_run_task' — eliminates context bloat from agents starting in the wrong tree. " +
 				"If no repo matches confidently, returns the brain's suggestion without spawning so the caller can decide whether to clone something new.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"goal":        stringProp("The work to accomplish (1-3 sentences). The brain uses this to pick a repo and the spawned session sees it as the first user message."),
@@ -538,7 +538,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			if len(repos) == 0 {
 				return map[string]interface{}{
 					"status":  "no-repos",
-					"hint":    "registry is empty — run rc_repos_refresh first",
+					"hint":    "registry is empty — run swop_repos_refresh first",
 					"goal":    goal,
 					"spawned": nil,
 				}, nil
@@ -588,7 +588,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 					"git clone https://github.com/%s/%s ~/git-bnx/%s",
 					matched.Owner, matched.Name, matched.Name,
 				)
-				result["hint"] = "picked repo isn't cloned — clone it then call rc_newgoal again"
+				result["hint"] = "picked repo isn't cloned — clone it then call swop_newgoal again"
 				return result, nil
 
 			case dryRun:

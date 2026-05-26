@@ -7,10 +7,10 @@ import (
 
 // registerReadTools registers all read-only MCP tools.
 func registerReadTools(reg *ToolRegistry, svc *Services) {
-	// ─── rc_health_check ────────────────────────────────────────────────
+	// ─── swop_health_check ────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_health_check",
+			Name:        "swop_health_check",
 			Description: "[READ] Basic health check — returns ok if the server is running.",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
@@ -19,10 +19,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_health ──────────────────────────────────────────────────────
+	// ─── swop_health ──────────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_health",
+			Name:        "swop_health",
 			Description: "[READ] Get dashboard stats (active sessions, projects, agents, git changes).",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
@@ -31,10 +31,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_dashboard ───────────────────────────────────────────────────
+	// ─── swop_dashboard ───────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_dashboard",
+			Name:        "swop_dashboard",
 			Description: "[READ] Get full swarm dashboard with session list, running count, and pool status.",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
@@ -43,10 +43,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_list_agents ─────────────────────────────────────────────────
+	// ─── swop_list_agents ─────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_list_agents",
+			Name:        "swop_list_agents",
 			Description: "[READ] List configured agents and auto-detect installed agents on the system.",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
@@ -55,10 +55,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_list_roots ──────────────────────────────────────────────────
+	// ─── swop_list_roots ──────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_list_roots",
+			Name:        "swop_list_roots",
 			Description: "[READ] List unique working directories from all sessions.",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
@@ -67,10 +67,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_list_executions ─────────────────────────────────────────────
+	// ─── swop_list_executions ─────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_list_executions",
+			Name:        "swop_list_executions",
 			Description: "[READ] List all task executions with status (running, waiting, completed, failed).",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
@@ -79,10 +79,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_get_execution ───────────────────────────────────────────────
+	// ─── swop_get_execution ───────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_get_execution",
+			Name:        "swop_get_execution",
 			Description: "[READ] Get a single task execution by ID.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Execution/session ID"),
@@ -97,10 +97,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_execution_progress ──────────────────────────────────────────
+	// ─── swop_execution_progress ──────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_execution_progress",
+			Name:        "swop_execution_progress",
 			Description: "[READ] Get execution progress including terminal capture for running sessions.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Execution/session ID"),
@@ -115,10 +115,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_tmux_sessions ───────────────────────────────────────────────
+	// ─── swop_tmux_sessions ───────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_tmux_sessions",
+			Name:        "swop_tmux_sessions",
 			Description: "[READ] List all tmux sessions on the system.",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
@@ -127,10 +127,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_list_sessions ───────────────────────────────────────────────
+	// ─── swop_list_sessions ───────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_list_sessions",
+			Name:        "swop_list_sessions",
 			Description: "[READ] List all managed sessions with status, mission, and activity.",
 			InputSchema: jsonSchema(map[string]interface{}{}, nil),
 		},
@@ -139,10 +139,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_get_session ─────────────────────────────────────────────────
+	// ─── swop_get_session ─────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_get_session",
+			Name:        "swop_get_session",
 			Description: "[READ] Get a single session by ID with full details.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Session ID"),
@@ -157,10 +157,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_get_terminal ────────────────────────────────────────────────
+	// ─── swop_get_terminal ────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_get_terminal",
+			Name:        "swop_get_terminal",
 			Description: "[READ] Get the terminal scrollback for a session (last ~500 lines).",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id": stringProp("Session ID"),
@@ -179,10 +179,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_list_audit_events ───────────────────────────────────────────
+	// ─── swop_list_audit_events ───────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_list_audit_events",
+			Name:        "swop_list_audit_events",
 			Description: "[READ] List session lifecycle events (create, stop, delete, rename). Returns most recent first.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"limit": map[string]interface{}{
@@ -200,10 +200,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_git_status ──────────────────────────────────────────────────
+	// ─── swop_git_status ──────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_git_status",
+			Name:        "swop_git_status",
 			Description: "[READ] Get git repository status (branch, staged/unstaged files, merge conflicts).",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"path": stringProp("Repository path (default: current directory)"),
@@ -215,10 +215,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_git_diff ────────────────────────────────────────────────────
+	// ─── swop_git_diff ────────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_git_diff",
+			Name:        "swop_git_diff",
 			Description: "[READ] Get git diff output for a repository.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"path":   stringProp("Repository path (default: current directory)"),
@@ -236,10 +236,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_git_branches ────────────────────────────────────────────────
+	// ─── swop_git_branches ────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_git_branches",
+			Name:        "swop_git_branches",
 			Description: "[READ] List git branches (local and optionally remote) for the repository.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"path":           stringProp("Repository path (default: current directory)"),
@@ -257,10 +257,10 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_git_log ─────────────────────────────────────────────────────
+	// ─── swop_git_log ─────────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_git_log",
+			Name:        "swop_git_log",
 			Description: "[READ] Get recent git log (last 20 commits, oneline format).",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"path": stringProp("Repository path (default: current directory)"),
@@ -276,11 +276,11 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
-	// ─── rc_list_repos ──────────────────────────────────────────────────
+	// ─── swop_list_repos ──────────────────────────────────────────────────
 	reg.Register(
 		ToolDefinition{
-			Name:        "rc_list_repos",
-			Description: "[READ] List repos in the SwarmOps registry (both cloned locally and known via GitHub). Used by rc_newgoal to pick a session's working directory.",
+			Name:        "swop_list_repos",
+			Description: "[READ] List repos in the SwarmOps registry (both cloned locally and known via GitHub). Used by swop_newgoal to pick a session's working directory.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"cloned_only": map[string]interface{}{
 					"type":        "boolean",

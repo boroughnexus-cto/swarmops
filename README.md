@@ -7,7 +7,7 @@ Terminal session manager for Claude Code. Manage multiple Claude Code sessions f
 - **TUI** — Left sidebar lists sessions, right pane shows live terminal output. Navigate with `ctrl+a`/`ctrl+z`, type to inject commands.
 - **Session management** — Spawn Claude Code in named tmux sessions with optional context from mcp-context.
 - **OpenAI API** — Warm pool of Claude CLI processes serving `/v1/chat/completions` for tool integrations.
-- **REST API** — Compatible with tkn-remote-code MCP servers for remote control.
+- **REST API** — Consumed by the tkn-swarmops MCP server for remote control.
 
 ## Quick Start
 

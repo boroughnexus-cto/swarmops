@@ -30,7 +30,7 @@ type Session struct {
 	Status           string  `json:"status"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
-	// Agent worktree fields (nil for plain rc_run_task sessions).
+	// Agent worktree fields (nil for plain swop_run_task sessions).
 	WorktreePath *string `json:"worktree_path,omitempty"`
 	GitBranch    *string `json:"git_branch,omitempty"`
 	RepoPath     *string `json:"repo_path,omitempty"`

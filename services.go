@@ -149,7 +149,7 @@ func (s *Services) SpawnAgent(ctx context.Context, name, repoPath, worktreePath,
 // TeardownAgent removes the git worktree and branch for an agent session, then
 // deletes the session record. Worktree cleanup happens before DB deletion so
 // that a failed filesystem cleanup can be retried by calling TeardownAgent again.
-// If the session has no associated worktree (plain rc_run_task session), only the
+// If the session has no associated worktree (plain swop_run_task session), only the
 // session record is deleted.
 func (s *Services) TeardownAgent(ctx context.Context, id string, deleteBranch bool) error {
 	sess, err := getSession(ctx, id)

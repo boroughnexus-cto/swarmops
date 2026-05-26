@@ -6,10 +6,10 @@ import (
 )
 
 // TestCreateSession_AllFields verifies that the full set of fields exposed by
-// the extended rc_run_task MCP tool (name, directory, context_id, context_name,
+// the extended swop_run_task MCP tool (name, directory, context_id, context_name,
 // mission, model) round-trips correctly through createSession into the DB.
 //
-// This is the truth source for the MCP plumbing — rc_run_task is a thin
+// This is the truth source for the MCP plumbing — swop_run_task is a thin
 // pass-through above this layer.
 func TestCreateSession_AllFields(t *testing.T) {
 	defer setupTestDB(t)()

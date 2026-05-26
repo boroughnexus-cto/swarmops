@@ -16,7 +16,7 @@ import (
 )
 
 // KnownRepo is one entry in the SwarmOps repo registry. The registry feeds
-// rc_newgoal so the brain can pick the right working directory for a goal
+// swop_newgoal so the brain can pick the right working directory for a goal
 // instead of every session starting in $HOME and re-discovering everything.
 type KnownRepo struct {
 	ID              int64  `json:"id"`
@@ -74,7 +74,7 @@ func repoDiscoveryOrgs() []string {
 }
 
 // listKnownRepos returns every entry, ordered by owner/name. Used by the
-// rc_newgoal brain prompt and the rc_list_repos read tool.
+// swop_newgoal brain prompt and the swop_list_repos read tool.
 func listKnownRepos(ctx context.Context) ([]KnownRepo, error) {
 	rows, err := database.QueryContext(ctx,
 		`SELECT id, owner, name, COALESCE(local_path,''), COALESCE(default_branch,''),

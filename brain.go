@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// BrainPick is the structured decision returned by the rc_newgoal dispatcher.
+// BrainPick is the structured decision returned by the swop_newgoal dispatcher.
 // `Pick` is either an "owner/name" slug from the known_repos catalogue or the
 // sentinel "none" — the latter signals that no existing repo fits and the
 // caller should propose creating a new one (or pick a closer-fitting candidate
@@ -21,7 +21,7 @@ type BrainPick struct {
 }
 
 // brainDefaultModel is the model used when the caller omits brain_model in
-// rc_newgoal. Haiku is fast (~1-2s end-to-end) and quite good enough to pick
+// swop_newgoal. Haiku is fast (~1-2s end-to-end) and quite good enough to pick
 // among ~30 well-described repos; callers can override per-call (sonnet for
 // trickier picks, chatgptsub-gpt-5.5 for cross-checking, etc.).
 const brainDefaultModel = "haiku"

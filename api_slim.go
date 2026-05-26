@@ -10,8 +10,9 @@ import (
 	"strings"
 )
 
-// handleAPI is the main REST API router. Maintains URL contract for MCP servers
-// (tkn-remote-code-nuc, tkn-remote-code-auto).
+// handleAPI is the main REST API router. Maintains URL contract for the
+// tkn-swarmops MCP server wrapper (and the historical tkn-remote-code-*
+// names it replaced).
 func handleAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -36,10 +37,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	case "dashboard":
 		handleDashboardAPI(w, r, ctx)
 	case "agents":
-		// MCP: rc_list_agents → returns sessions as "agents"
+		// MCP: swop_list_agents → returns sessions as "agents"
 		handleSessionsAsAgentsAPI(w, r, ctx)
 	case "task-executions":
-		// MCP: rc_list_executions, rc_run_task, rc_send_input
+		// MCP: swop_list_executions, swop_run_task, swop_send_input
 		handleTaskExecutionsAPI(w, r, ctx, pathParts[1:])
 	case "tmux-sessions":
 		handleTmuxSessionsAPI(w, r)
@@ -94,12 +95,12 @@ func handleSessionsAsAgentsAPI(w http.ResponseWriter, r *http.Request, ctx conte
 func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
 	switch r.Method {
 	case http.MethodGet:
-		// rc_list_executions → return sessions as executions
+		// swop_list_executions → return sessions as executions
 		sessions, _ := listSessions(ctx)
 		_ = json.NewEncoder(w).Encode(sessions)
 
 	case http.MethodPost:
-		// rc_run_task → create a new session
+		// swop_run_task → create a new session
 		if len(pathParts) > 0 {
 			// Handle sub-resources like /:id/input
 			if len(pathParts) >= 2 && pathParts[1] == "input" {

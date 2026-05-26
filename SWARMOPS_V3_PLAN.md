@@ -46,30 +46,30 @@ Every tool method gets renamed. The function names ARE the MCP tool names (the d
 
 | Old name | New name | Category |
 |----------|----------|----------|
-| `rc_health_check` | `swo_health_check` | read |
-| `rc_health` | `swo_dashboard_stats` | read |
-| `rc_tmux_sessions` | `swo_tmux_sessions` | read |
-| `rc_list_agents` | `swo_list_agents` | read |
-| `rc_list_roots` | `swo_list_roots` | read |
-| `rc_list_projects` | `swo_list_projects` | read |
-| `rc_list_tasks` | `swo_list_tasks` | read |
-| `rc_list_executions` | `swo_list_executions` | read |
-| `rc_get_execution` | `swo_get_execution` | read |
-| `rc_wait_for_execution` | `swo_wait_for_execution` | read |
-| `rc_execution_progress` | `swo_execution_progress` | read |
-| `rc_dashboard` | `swo_agent_dashboard` | read |
-| `rc_git_status` | `swo_git_status` | read |
-| `rc_git_diff` | `swo_git_diff` | read |
-| `rc_git_branches` | `swo_git_branches` | read |
-| `rc_run_task` | `swo_run_task` | write |
-| `rc_send_input` | `swo_send_input` | write |
-| `rc_create_project` | `swo_create_project` | write |
-| `rc_create_task` | `swo_create_task` | write |
-| `rc_git_add` | `swo_git_add` | write |
-| `rc_git_commit` | `swo_git_commit` | write |
-| `rc_accept_execution` | `swo_accept_execution` | dangerous |
-| `rc_delete_execution` | `swo_delete_execution` | dangerous |
-| `rc_git_push` | `swo_git_push` | dangerous |
+| `swop_health_check` | `swo_health_check` | read |
+| `swop_health` | `swo_dashboard_stats` | read |
+| `swop_tmux_sessions` | `swo_tmux_sessions` | read |
+| `swop_list_agents` | `swo_list_agents` | read |
+| `swop_list_roots` | `swo_list_roots` | read |
+| `swop_list_projects` | `swo_list_projects` | read |
+| `swop_list_tasks` | `swo_list_tasks` | read |
+| `swop_list_executions` | `swo_list_executions` | read |
+| `swop_get_execution` | `swo_get_execution` | read |
+| `swop_wait_for_execution` | `swo_wait_for_execution` | read |
+| `swop_execution_progress` | `swo_execution_progress` | read |
+| `swop_dashboard` | `swo_agent_dashboard` | read |
+| `swop_git_status` | `swo_git_status` | read |
+| `swop_git_diff` | `swo_git_diff` | read |
+| `swop_git_branches` | `swo_git_branches` | read |
+| `swop_run_task` | `swo_run_task` | write |
+| `swop_send_input` | `swo_send_input` | write |
+| `swop_create_project` | `swo_create_project` | write |
+| `swop_create_task` | `swo_create_task` | write |
+| `swop_git_add` | `swo_git_add` | write |
+| `swop_git_commit` | `swo_git_commit` | write |
+| `swop_accept_execution` | `swo_accept_execution` | dangerous |
+| `swop_delete_execution` | `swo_delete_execution` | dangerous |
+| `swop_git_push` | `swo_git_push` | dangerous |
 
 Also update all docstrings and description strings that reference `rc_*` tool names.
 
@@ -89,9 +89,9 @@ Add temporary aliases so existing Hermes SOUL.md references to `rc_*` don't brea
 
 ```python
 # Temporary aliases — remove after Hermes SOUL.md is updated
-rc_health_check = swo_health_check
-rc_dashboard = swo_agent_dashboard
-rc_run_task = swo_run_task
+swop_health_check = swo_health_check
+swop_dashboard = swo_agent_dashboard
+swop_run_task = swo_run_task
 # ... etc
 ```
 
