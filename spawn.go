@@ -103,8 +103,16 @@ func profileToHappierArgs(profile string) []string {
 	return []string{"--profile", profile}
 }
 
-// happierAvailable returns true if the happier binary is in PATH.
+// happierAvailable returns true if the happier binary is in PATH and the
+// SWARMOPS_DISABLE_HAPPIER env var is not set. The env var exists because
+// `happier --yolo` is broken on some hosts (deletes its hook settings file
+// before claude can read it, causing the spawned tmux session to die
+// immediately). When happier is disabled or absent, spawnSession falls back
+// to launching claude directly with a persisted --session-id.
 func happierAvailable() bool {
+	if os.Getenv("SWARMOPS_DISABLE_HAPPIER") != "" {
+		return false
+	}
 	_, err := exec.LookPath("happier")
 	return err == nil
 }
