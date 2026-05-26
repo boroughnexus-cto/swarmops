@@ -30,3 +30,4 @@ remote-code
 remote-code.db
 remote-code-test*.db*
 .worktrees/
+scratch/
