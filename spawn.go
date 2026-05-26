@@ -80,18 +80,128 @@ func listHappierSessionIDs() map[string]bool {
 }
 
 // discoverNewHappierSession polls the daemon until a session appears that isn't in existing.
-// Returns the new session ID, or "" on timeout.
+// Returns the new session ID, or "" on timeout. Skips transient "PID-<pid>"
+// handles — happier exposes those in the daemon list before the server-side
+// session id (a cuid) is assigned, and they are NOT valid set-title targets
+// (set-title returns session_not_found). We wait for the real cuid.
 func discoverNewHappierSession(existing map[string]bool, timeout time.Duration) string {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		for id := range listHappierSessionIDs() {
-			if !existing[id] {
+			if !existing[id] && !strings.HasPrefix(id, "PID-") {
 				return id
 			}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
 	return ""
+}
+
+// happierActiveSession is a minimal parse of one entry in
+// `happier session list --active --json`.
+type happierActiveSession struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
+}
+
+// listActiveHappierSessions returns active happier sessions from the SERVER
+// view (`happier session list --active`). Unlike the daemon list this only
+// ever contains real session cuids (never transient "PID-<pid>" handles) and
+// carries each session's working directory — so it's the reliable way to bind
+// a freshly-launched session to its SwarmOps record by cwd.
+func listActiveHappierSessions() []happierActiveSession {
+	out, err := exec.Command("happier", "session", "list", "--active", "--json").Output()
+	if err != nil {
+		return nil
+	}
+	var resp struct {
+		Data struct {
+			Sessions []happierActiveSession `json:"sessions"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(out, &resp) != nil {
+		return nil
+	}
+	return resp.Data.Sessions
+}
+
+// activeHappierIDSet snapshots the ids of currently-active happier sessions,
+// used as the "before launch" exclusion set so discoverHappierSessionForDir
+// only matches the session this launch creates.
+func activeHappierIDSet() map[string]bool {
+	m := map[string]bool{}
+	for _, s := range listActiveHappierSessions() {
+		m[s.ID] = true
+	}
+	return m
+}
+
+// discoverHappierSessionForDir polls the server session list for an active
+// session whose working directory is dir and whose id is not in exclude (the
+// pre-launch snapshot). Returns the id, or "" on timeout. Keying on cwd +
+// a pre-launch exclusion set is robust to launch bursts (many sessions
+// starting at once) where "whatever new id appeared" is ambiguous, and it
+// never returns a transient PID- handle.
+func discoverHappierSessionForDir(dir string, exclude map[string]bool, timeout time.Duration) string {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		for _, s := range listActiveHappierSessions() {
+			if s.Path == dir && !exclude[s.ID] && !strings.HasPrefix(s.ID, "PID-") {
+				return s.ID
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return ""
+}
+
+// setHappierTitle sets the happier mobile-app title for a session so the app
+// shows the SwarmOps session name rather than the working-directory basename.
+//
+// Two subtleties this handles:
+//   - `happier session set-title` exits 0 even when the session isn't found
+//     yet (it prints `{"ok":false,...}` but returns status 0), so we must parse
+//     the --json `ok` field — a plain .Run() can't tell success from failure.
+//   - Right after launch the session is in the daemon list but may not be
+//     persisted server-side for a moment, so we retry briefly.
+func setHappierTitle(happierID, name string) {
+	if happierID == "" || name == "" {
+		return
+	}
+	for attempt := 1; attempt <= 6; attempt++ {
+		out, err := exec.Command("happier", "session", "set-title", happierID, name, "--json").Output()
+		if err == nil {
+			var resp struct {
+				OK bool `json:"ok"`
+			}
+			if json.Unmarshal(out, &resp) == nil && resp.OK {
+				return
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	log.Printf("happier: set-title failed for %s (%q) after retries", happierID, name)
+}
+
+// syncHappierIdentity binds the happier session that appeared after a (re)launch
+// to a managed SwarmOps session: it discovers the new happier id (one present
+// now but not in preIDs), persists it as the session's claude_session_id, and
+// sets the happier app title to the SwarmOps name. Used by the restore and
+// resume paths — which relaunch `happier --yolo` as a fresh session and so get
+// a NEW happier id each time — so the app keeps showing the SwarmOps name
+// across restarts instead of falling back to the cwd. Returns the discovered
+// id, or "" on timeout.
+func syncHappierIdentity(ctx context.Context, sessionID, name, dir string, excludeIDs map[string]bool, timeout time.Duration) string {
+	happierID := discoverHappierSessionForDir(dir, excludeIDs, timeout)
+	if happierID == "" {
+		log.Printf("happier: no active session for %q (dir %s) within %s — title not set", name, dir, timeout)
+		return ""
+	}
+	if err := updateClaudeSessionID(ctx, sessionID, happierID); err != nil {
+		log.Printf("happier: store session id for %s: %v", sessionID, err)
+	}
+	setHappierTitle(happierID, name)
+	return happierID
 }
 
 // profileToHappierArgs returns the --profile flag args for happier, or nil if profile is empty.
@@ -178,7 +288,7 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 	useHappier := happierAvailable()
 
 	if useHappier {
-		preSpawnIDs = listHappierSessionIDs()
+		preSpawnIDs = activeHappierIDSet()
 		sessionCmd = []string{"happier", "--yolo"}
 		sessionCmd = append(sessionCmd, profileToHappierArgs(profile)...)
 		// happier's `--model` flag triggers a bug where it deletes its hook
@@ -219,18 +329,13 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 	}
 
 	if useHappier {
-		// Discover the happier session ID and set the session title in the mobile app.
-		if happierID := discoverNewHappierSession(preSpawnIDs, 10*time.Second); happierID != "" {
-			if name != "" {
-				exec.Command("happier", "session", "set-title", happierID, name).Run()
-			}
-			if err := updateClaudeSessionID(ctx, s.ID, happierID); err != nil {
-				log.Printf("spawn: failed to store happier session ID for %s: %v", s.ID, err)
-			}
+		// Discover the new happier session (by cwd), persist its id, and set the
+		// mobile-app title to the SwarmOps name.
+		if happierID := syncHappierIdentity(ctx, s.ID, name, directory, preSpawnIDs, 15*time.Second); happierID != "" {
 			s.ClaudeSessionID = &happierID
 			log.Printf("spawn: created session %q (tmux=%s, dir=%s, happier=%s, model=%s, profile=%s)", name, s.TmuxSession, directory, happierID, model, profile)
 		} else {
-			log.Printf("spawn: created session %q (tmux=%s, dir=%s, model=%s, profile=%s) — happier ID discovery timed out", name, s.TmuxSession, directory, model, profile)
+			log.Printf("spawn: created session %q (tmux=%s, dir=%s, model=%s, profile=%s) — happier session not found", name, s.TmuxSession, directory, model, profile)
 		}
 	} else {
 		if err := updateClaudeSessionID(ctx, s.ID, claudeUUID); err != nil {

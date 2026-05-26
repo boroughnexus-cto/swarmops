@@ -297,7 +297,7 @@ func renameSession(ctx context.Context, id, name string) error {
 	s, err2 := getSession(ctx, id)
 	if err2 == nil && s.ClaudeSessionID != nil && *s.ClaudeSessionID != "" {
 		happierID := *s.ClaudeSessionID
-		go exec.Command("happier", "session", "set-title", happierID, name).Run()
+		go setHappierTitle(happierID, name)
 	}
 	return nil
 }

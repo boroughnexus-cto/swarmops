@@ -511,7 +511,7 @@ func restartSessionWithProfileCmd(tmuxSess, sessionID, name string, happierParts
 		if newID := discoverNewHappierSession(pre, 15*time.Second); newID != "" {
 			found = true
 			updateClaudeSessionID(context.Background(), sessionID, newID)
-			exec.Command("happier", "session", "set-title", newID, name).Run()
+			setHappierTitle(newID, name)
 		}
 		return profileRestartDoneMsg{sessionID: sessionID, sessionLabel: name, profileLabel: profileLabel, happierFound: found}
 	}
@@ -890,7 +890,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					go func(sessionID, name string, pre map[string]bool) {
 						if newID := discoverNewHappierSession(pre, 15*time.Second); newID != "" {
 							updateClaudeSessionID(context.Background(), sessionID, newID)
-							exec.Command("happier", "session", "set-title", newID, name).Run()
+							setHappierTitle(newID, name)
 						}
 					}(item.sessionID, item.label, preIDs)
 					m.flash = fmt.Sprintf("Restarted Claude in %s", item.label)
