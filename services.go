@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Services provides business logic shared by REST API and MCP handlers.
@@ -226,11 +227,16 @@ func (s *Services) StartSession(ctx context.Context, id string) error {
 	if sess.Status == "running" {
 		return fmt.Errorf("session %s is already running", id)
 	}
+	// Snapshot active happier ids before (re)launch — resumeClaudeCmd starts a
+	// fresh happier session (no --existing-session) with a NEW id, so below we
+	// rebind the id and reapply the SwarmOps name as the app title (matched by
+	// cwd); otherwise the resumed session shows its cwd basename, not its name.
+	preIDs := activeHappierIDSet()
+	dir := "."
+	if sess.Directory != "" {
+		dir = sess.Directory
+	}
 	if !isTmuxAlive(sess.TmuxSession) {
-		dir := "."
-		if sess.Directory != "" {
-			dir = sess.Directory
-		}
 		claudeID := ""
 		if sess.ClaudeSessionID != nil {
 			claudeID = *sess.ClaudeSessionID
@@ -260,6 +266,8 @@ func (s *Services) StartSession(ctx context.Context, id string) error {
 		exec.Command("tmux", append([]string{"send-keys", "-t", sess.TmuxSession}, append(cArgs, "")...)...).Run()
 		exec.Command("tmux", "send-keys", "-t", sess.TmuxSession, strings.Join(cArgs, " "), "Enter").Run()
 	}
+	// Rebind the new happier session id + reapply the SwarmOps name as the app title.
+	syncHappierIdentity(ctx, sess.ID, sess.Name, dir, preIDs, 20*time.Second)
 	return nil
 }
 
