@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -21,12 +22,20 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"context_id":   stringProp("Optional tkn-context ID to attach to the session"),
 				"context_name": stringProp("Optional human-readable context label (display only — paired with context_id)"),
 				"model":        stringProp("Optional model name or alias (e.g. 'sonnet', 'opus', 'claude-sonnet-4-6'). Defaults to system setting."),
+				"profile":      stringProp("Optional happier backend profile (e.g. 'deepseek', 'openai', 'gemini'). Defaults to 'anthropic'. Takes effect on next restart if session already exists."),
+				"task_brief":   stringProp("Optional task brief written to TASK.md in the working directory before the agent starts."),
+				"env_overrides": map[string]interface{}{
+					"type":        "object",
+					"description": "Optional environment variable overrides injected into the session. Omit to use the swarmops process environment (default Anthropic API). To route through AIP backends, always set both ANTHROPIC_BASE_URL=http://10.0.0.2:4000 and ANTHROPIC_API_KEY=sk-35439ddea8690f7c89be8497e2f43e318d4890123d288cca, then select the backend via the model field: omit model (or use a Claude ID) for GPT-5.4 [gpt], set model=or-deepseek-v4-pro for DeepSeek V4 Pro [dseek]. Session name is auto-prefixed accordingly. Keys and values must be strings.",
+					"additionalProperties": map[string]interface{}{"type": "string"},
+				},
 			}, nil),
 		},
 		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			name := getStringArg(args, "name", "")
 			directory := getStringArg(args, "directory", "")
 			model := getStringArg(args, "model", "")
+			taskBrief := getStringArg(args, "task_brief", "")
 
 			missionStr := getStringArg(args, "mission", "")
 			var mission *string
@@ -43,7 +52,133 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			if ctxNameStr != "" {
 				contextName = &ctxNameStr
 			}
-			return svc.RunTask(ctx, name, directory, contextID, contextName, mission, model)
+			envOverrides := getStringMapArg(args, "env_overrides")
+
+			// Auto-prepend [gpt] or [dseek] prefix when routing to a non-Anthropic backend.
+			if _, hasBaseURL := envOverrides["ANTHROPIC_BASE_URL"]; hasBaseURL && name != "" && !strings.HasPrefix(name, "[") {
+				if strings.HasPrefix(model, "or-deepseek") {
+					name = "[dseek] " + name
+				} else {
+					name = "[gpt] " + name
+				}
+			}
+
+			profile := getStringArg(args, "profile", "")
+			return svc.RunTask(ctx, name, directory, contextID, contextName, mission, model, profile, taskBrief, envOverrides)
+		},
+	)
+
+	// ─── rc_spawn_agent ─────────────────────────────────────────────────
+	reg.Register(
+		ToolDefinition{
+			Name: "rc_spawn_agent",
+			Description: "[WRITE] Atomically create a git worktree and spawn a Claude Code agent inside it. " +
+				"Writes an optional TASK.md brief before the agent starts. " +
+				"Rolls back the worktree on any failure. " +
+				"Use rc_teardown_agent to clean up when done.",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"repo_path":     stringProp("Absolute path to the git repository root (required)."),
+				"name":          stringProp("Agent session name (auto-generated if empty). Sessions routed via LiteLLM GPT should use a [gpt] prefix, e.g. '[gpt] my-task'."),
+				"worktree_path": stringProp("Full path for the worktree directory (auto-generated under <repo>-worktrees/ if empty)."),
+				"branch":        stringProp("Git branch name (defaults to agent/<slug>-<hex> derived from worktree path)."),
+				"mission":       stringProp("Optional mission statement (1-3 sentences)."),
+				"task_brief":    stringProp("Optional task brief written to TASK.md in the worktree before the agent starts."),
+				"context_id":    stringProp("Optional tkn-context ID to attach to the session."),
+				"context_name":  stringProp("Optional human-readable context label (display only)."),
+				"model":         stringProp("Optional model name or alias (e.g. 'sonnet', 'opus'). Defaults to system setting."),
+				"profile":       stringProp("Optional happier backend profile (e.g. 'deepseek', 'openai', 'gemini'). Defaults to 'anthropic'."),
+				"env_overrides": map[string]interface{}{
+					"type":        "object",
+					"description": "Optional environment variable overrides injected into the session. Omit to use the swarmops process environment (default Anthropic API). To route through AIP backends, always set both ANTHROPIC_BASE_URL=http://10.0.0.2:4000 and ANTHROPIC_API_KEY=sk-35439ddea8690f7c89be8497e2f43e318d4890123d288cca, then select the backend via the model field: omit model (or use a Claude ID) for GPT-5.4 [gpt], set model=or-deepseek-v4-pro for DeepSeek V4 Pro [dseek]. Session name is auto-prefixed accordingly. Keys and values must be strings.",
+					"additionalProperties": map[string]interface{}{"type": "string"},
+				},
+			}, []string{"repo_path"}),
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			repoPathRaw := getStringArg(args, "repo_path", "")
+			if repoPathRaw == "" {
+				return nil, fmt.Errorf("repo_path is required")
+			}
+
+			// Validate repo_path at the system boundary.
+			repoPath, err := validateRepoPath(repoPathRaw)
+			if err != nil {
+				return nil, fmt.Errorf("invalid repo_path: %w", err)
+			}
+
+			// Validate worktree_path if provided.
+			worktreePathRaw := getStringArg(args, "worktree_path", "")
+			var worktreePath string
+			if worktreePathRaw != "" {
+				worktreePath, err = validateWorktreePath(worktreePathRaw)
+				if err != nil {
+					return nil, fmt.Errorf("invalid worktree_path: %w", err)
+				}
+			}
+
+			name := getStringArg(args, "name", "")
+			branch := getStringArg(args, "branch", "")
+			model := getStringArg(args, "model", "")
+			taskBrief := getStringArg(args, "task_brief", "")
+
+			missionStr := getStringArg(args, "mission", "")
+			var mission *string
+			if missionStr != "" {
+				mission = &missionStr
+			}
+			ctxIDStr := getStringArg(args, "context_id", "")
+			var contextID *string
+			if ctxIDStr != "" {
+				contextID = &ctxIDStr
+			}
+			ctxNameStr := getStringArg(args, "context_name", "")
+			var contextName *string
+			if ctxNameStr != "" {
+				contextName = &ctxNameStr
+			}
+			envOverrides := getStringMapArg(args, "env_overrides")
+
+			// Auto-prepend [gpt] or [dseek] prefix when routing to a non-Anthropic backend.
+			if _, hasBaseURL := envOverrides["ANTHROPIC_BASE_URL"]; hasBaseURL && name != "" && !strings.HasPrefix(name, "[") {
+				if strings.HasPrefix(model, "or-deepseek") {
+					name = "[dseek] " + name
+				} else {
+					name = "[gpt] " + name
+				}
+			}
+
+			profile := getStringArg(args, "profile", "")
+			return svc.SpawnAgent(ctx, name, repoPath, worktreePath, branch, contextID, contextName, mission, model, profile, taskBrief, envOverrides)
+		},
+	)
+
+	// ─── rc_teardown_agent ──────────────────────────────────────────────
+	reg.Register(
+		ToolDefinition{
+			Name: "rc_teardown_agent",
+			Description: "[WRITE] Tear down an agent session: remove its git worktree, optionally delete the branch, " +
+				"and delete the session record. Safe to call on plain rc_run_task sessions too (skips worktree step). " +
+				"WARNING: delete_branch=true on an unmerged branch will discard uncommitted work.",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"id":            stringProp("Session ID to tear down."),
+				"delete_branch": map[string]interface{}{"type": "boolean", "description": "Delete the git branch after removing the worktree (default false). Only applicable to agent sessions."},
+			}, []string{"id"}),
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			id := getStringArg(args, "id", "")
+			if id == "" {
+				return nil, fmt.Errorf("id is required")
+			}
+			deleteBranch := false
+			if v, ok := args["delete_branch"]; ok {
+				if b, ok := v.(bool); ok {
+					deleteBranch = b
+				}
+			}
+			if err := svc.TeardownAgent(ctx, id, deleteBranch); err != nil {
+				return nil, err
+			}
+			return map[string]string{"status": "torn_down"}, nil
 		},
 	)
 
@@ -96,6 +231,72 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				return nil, err
 			}
 			return map[string]string{"status": "ok", "name": name}, nil
+		},
+	)
+
+	// ─── rc_update_session ──────────────────────────────────────────────
+	reg.Register(
+		ToolDefinition{
+			Name:        "rc_update_session",
+			Description: "[WRITE] Update editable session fields: name, mission, directory, profile, context_id/context_name. Only supplied (non-empty) fields are changed. Profile change takes effect on next restart — does not auto-restart the session.",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"id":           stringProp("Session ID (required)"),
+				"name":         stringProp("New session name (leave empty to keep current)"),
+				"mission":      stringProp("New mission statement; pass empty string to clear"),
+				"directory":    stringProp("New working directory (validated to exist; takes effect on next restart)"),
+				"profile":      stringProp("New happier backend profile (e.g. 'deepseek', 'openai', 'gemini', '' for default anthropic). Takes effect on next restart."),
+				"context_id":   stringProp("New context ID (empty to clear)"),
+				"context_name": stringProp("New context display name (empty to clear)"),
+			}, []string{"id"}),
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			id := getStringArg(args, "id", "")
+			if id == "" {
+				return nil, fmt.Errorf("id is required")
+			}
+			notes := []string{}
+			if name, ok := args["name"]; ok && name != "" {
+				if err := svc.RenameSession(ctx, id, name.(string)); err != nil {
+					return nil, fmt.Errorf("rename: %w", err)
+				}
+				notes = append(notes, "name updated")
+			}
+			if _, hasMission := args["mission"]; hasMission {
+				mission := getStringArg(args, "mission", "")
+				if err := svc.UpdateSessionMission(ctx, id, mission); err != nil {
+					return nil, fmt.Errorf("mission: %w", err)
+				}
+				notes = append(notes, "mission updated")
+			}
+			if dir, ok := args["directory"]; ok && dir != "" {
+				dirStr := dir.(string)
+				if _, err := os.Stat(dirStr); err != nil {
+					return nil, fmt.Errorf("directory %q does not exist: %w", dirStr, err)
+				}
+				if err := svc.UpdateSessionDirectory(ctx, id, dirStr); err != nil {
+					return nil, fmt.Errorf("directory: %w", err)
+				}
+				notes = append(notes, "directory updated (takes effect on next restart)")
+			}
+			if _, hasProfile := args["profile"]; hasProfile {
+				profile := getStringArg(args, "profile", "")
+				if err := svc.UpdateSessionProfile(ctx, id, profile); err != nil {
+					return nil, fmt.Errorf("profile: %w", err)
+				}
+				notes = append(notes, "profile updated (takes effect on next restart)")
+			}
+			if _, hasCtx := args["context_id"]; hasCtx {
+				ctxID := getStringArg(args, "context_id", "")
+				ctxName := getStringArg(args, "context_name", "")
+				if err := svc.UpdateSessionContext(ctx, id, ctxID, ctxName); err != nil {
+					return nil, fmt.Errorf("context: %w", err)
+				}
+				notes = append(notes, "context updated")
+			}
+			if len(notes) == 0 {
+				return map[string]string{"status": "ok", "note": "no fields supplied"}, nil
+			}
+			return map[string]interface{}{"status": "ok", "updated": notes}, nil
 		},
 	)
 

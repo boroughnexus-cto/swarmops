@@ -79,17 +79,12 @@ func injectRestorePrompt(s Session, delay time.Duration) {
 }
 
 func buildClaudeRestoreArgs(ctx context.Context, s *Session) []string {
-	args := []string{"claude"}
-	if s.ClaudeSessionID != nil && isValidUUID(*s.ClaudeSessionID) {
-		args = append(args, "--resume", *s.ClaudeSessionID)
-	} else {
-		newUUID := generateUUID()
-		updateClaudeSessionID(ctx, s.ID, newUUID)
-		args = append(args, "--session-id", newUUID)
+	args := []string{"happier", "--yolo"}
+	// Happier session IDs are not UUIDs; skip old UUID-format IDs from the pre-happier era.
+	if s.ClaudeSessionID != nil && *s.ClaudeSessionID != "" && !isValidUUID(*s.ClaudeSessionID) {
+		args = append(args, "--existing-session", *s.ClaudeSessionID)
 	}
-	args = append(args, "--dangerously-skip-permissions")
-	if s.Name != "" {
-		args = append(args, "--remote-control", s.Name)
-	}
+	args = append(args, profileToHappierArgs(s.Profile)...)
+	args = append(args, "--model", effectiveModel(s.Model))
 	return args
 }

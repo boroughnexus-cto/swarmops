@@ -24,11 +24,16 @@ type Session struct {
 	ContextName      *string `json:"context_name,omitempty"`
 	Mission          *string `json:"mission,omitempty"`
 	ClaudeSessionID  *string `json:"claude_session_id,omitempty"`
-	Model            string  `json:"model,omitempty"` // "" = default claude model
+	Model            string  `json:"model,omitempty"`    // "" = default claude model
+	Profile          string  `json:"profile,omitempty"` // happier --profile id; "" = anthropic (default)
 	Hidden           bool    `json:"hidden"`
 	Status           string  `json:"status"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
+	// Agent worktree fields (nil for plain rc_run_task sessions).
+	WorktreePath *string `json:"worktree_path,omitempty"`
+	GitBranch    *string `json:"git_branch,omitempty"`
+	RepoPath     *string `json:"repo_path,omitempty"`
 }
 
 // ManagedSessionEvent is a single audit trail entry for a managed session.
@@ -85,15 +90,16 @@ func generateID() string {
 	return hex.EncodeToString(b)
 }
 
-func createSession(ctx context.Context, name, directory string, contextID, contextName, mission *string, hidden bool, model string) (*Session, error) {
+func createSession(ctx context.Context, name, directory string, contextID, contextName, mission *string, hidden bool, model, profile string, worktreePath, gitBranch, repoPath *string) (*Session, error) {
 	id := generateID()
 	tmuxName := "sw-" + id
 	now := time.Now().Unix()
 
 	_, err := database.ExecContext(ctx,
-		`INSERT INTO managed_sessions (id, name, tmux_session, directory, context_id, context_name, mission, model, hidden, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)`,
-		id, name, tmuxName, directory, contextID, contextName, mission, nullableString(model), boolToInt(hidden), now, now,
+		`INSERT INTO managed_sessions (id, name, tmux_session, directory, context_id, context_name, mission, model, profile, hidden, status, created_at, updated_at, worktree_path, git_branch, repo_path)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`,
+		id, name, tmuxName, directory, contextID, contextName, mission, nullableString(model), nullableString(profile), boolToInt(hidden), now, now,
+		nullableStringPtr(worktreePath), nullableStringPtr(gitBranch), nullableStringPtr(repoPath),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert session: %w", err)
@@ -104,19 +110,31 @@ func createSession(ctx context.Context, name, directory string, contextID, conte
 		"id": id, "name": name, "directory": directory,
 	})
 	return &Session{
-		ID:          id,
-		Name:        name,
-		TmuxSession: tmuxName,
-		Directory:   directory,
-		ContextID:   contextID,
-		ContextName: contextName,
-		Mission:     mission,
-		Model:       model,
-		Hidden:      hidden,
-		Status:      "running",
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:           id,
+		Name:         name,
+		TmuxSession:  tmuxName,
+		Directory:    directory,
+		ContextID:    contextID,
+		ContextName:  contextName,
+		Mission:      mission,
+		Model:        model,
+		Profile:      profile,
+		Hidden:       hidden,
+		Status:       "running",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		WorktreePath: worktreePath,
+		GitBranch:    gitBranch,
+		RepoPath:     repoPath,
 	}, nil
+}
+
+// nullableStringPtr returns nil if p is nil or points to an empty string.
+func nullableStringPtr(p *string) interface{} {
+	if p == nil || *p == "" {
+		return nil
+	}
+	return *p
 }
 
 // nullableString returns nil if s is empty (for SQL nullable columns).
@@ -129,7 +147,7 @@ func nullableString(s string) interface{} {
 
 func listSessions(ctx context.Context) ([]Session, error) {
 	rows, err := database.QueryContext(ctx,
-		`SELECT id, name, tmux_session, directory, context_id, context_name, mission, claude_session_id, COALESCE(model,''), hidden, status, created_at, updated_at
+		`SELECT id, name, tmux_session, directory, context_id, context_name, mission, claude_session_id, COALESCE(model,''), COALESCE(profile,''), hidden, status, created_at, updated_at, worktree_path, git_branch, repo_path
 		 FROM managed_sessions ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -139,9 +157,9 @@ func listSessions(ctx context.Context) ([]Session, error) {
 	var sessions []Session
 	for rows.Next() {
 		var s Session
-		var ctxID, ctxName, mission, claudeID sql.NullString
+		var ctxID, ctxName, mission, claudeID, worktreePath, gitBranch, repoPath sql.NullString
 		var hiddenInt int
-		if err := rows.Scan(&s.ID, &s.Name, &s.TmuxSession, &s.Directory, &ctxID, &ctxName, &mission, &claudeID, &s.Model, &hiddenInt, &s.Status, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.TmuxSession, &s.Directory, &ctxID, &ctxName, &mission, &claudeID, &s.Model, &s.Profile, &hiddenInt, &s.Status, &s.CreatedAt, &s.UpdatedAt, &worktreePath, &gitBranch, &repoPath); err != nil {
 			return nil, err
 		}
 		if ctxID.Valid {
@@ -156,6 +174,15 @@ func listSessions(ctx context.Context) ([]Session, error) {
 		if claudeID.Valid {
 			s.ClaudeSessionID = &claudeID.String
 		}
+		if worktreePath.Valid {
+			s.WorktreePath = &worktreePath.String
+		}
+		if gitBranch.Valid {
+			s.GitBranch = &gitBranch.String
+		}
+		if repoPath.Valid {
+			s.RepoPath = &repoPath.String
+		}
 		s.Hidden = hiddenInt != 0
 		sessions = append(sessions, s)
 	}
@@ -164,12 +191,12 @@ func listSessions(ctx context.Context) ([]Session, error) {
 
 func getSession(ctx context.Context, id string) (*Session, error) {
 	var s Session
-	var ctxID, ctxName, mission, claudeID sql.NullString
+	var ctxID, ctxName, mission, claudeID, worktreePath, gitBranch, repoPath sql.NullString
 	var hiddenInt int
 	err := database.QueryRowContext(ctx,
-		`SELECT id, name, tmux_session, directory, context_id, context_name, mission, claude_session_id, COALESCE(model,''), hidden, status, created_at, updated_at
+		`SELECT id, name, tmux_session, directory, context_id, context_name, mission, claude_session_id, COALESCE(model,''), COALESCE(profile,''), hidden, status, created_at, updated_at, worktree_path, git_branch, repo_path
 		 FROM managed_sessions WHERE id = ?`, id,
-	).Scan(&s.ID, &s.Name, &s.TmuxSession, &s.Directory, &ctxID, &ctxName, &mission, &claudeID, &s.Model, &hiddenInt, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+	).Scan(&s.ID, &s.Name, &s.TmuxSession, &s.Directory, &ctxID, &ctxName, &mission, &claudeID, &s.Model, &s.Profile, &hiddenInt, &s.Status, &s.CreatedAt, &s.UpdatedAt, &worktreePath, &gitBranch, &repoPath)
 	if err != nil {
 		return nil, err
 	}
@@ -184,6 +211,15 @@ func getSession(ctx context.Context, id string) (*Session, error) {
 	}
 	if claudeID.Valid {
 		s.ClaudeSessionID = &claudeID.String
+	}
+	if worktreePath.Valid {
+		s.WorktreePath = &worktreePath.String
+	}
+	if gitBranch.Valid {
+		s.GitBranch = &gitBranch.String
+	}
+	if repoPath.Valid {
+		s.RepoPath = &repoPath.String
 	}
 	s.Hidden = hiddenInt != 0
 	return &s, nil
@@ -253,9 +289,78 @@ func renameSession(ctx context.Context, id, name string) error {
 		"UPDATE managed_sessions SET name = ?, updated_at = ? WHERE id = ?",
 		name, time.Now().Unix(), id,
 	)
-	if err == nil {
-		recordSessionEvent(id, name, "renamed", "")
+	if err != nil {
+		return err
 	}
+	recordSessionEvent(id, name, "renamed", "")
+	// Sync title in happier app asynchronously so callers aren't blocked.
+	s, err2 := getSession(ctx, id)
+	if err2 == nil && s.ClaudeSessionID != nil && *s.ClaudeSessionID != "" {
+		happierID := *s.ClaudeSessionID
+		go exec.Command("happier", "session", "set-title", happierID, name).Run()
+	}
+	return nil
+}
+
+func updateSessionProfile(ctx context.Context, id, profile string) error {
+	if database == nil {
+		return nil
+	}
+	_, err := database.ExecContext(ctx,
+		"UPDATE managed_sessions SET profile = ?, updated_at = ? WHERE id = ?",
+		nullableString(profile), time.Now().Unix(), id,
+	)
+	return err
+}
+
+func updateSessionDirectory(ctx context.Context, id, directory string) error {
+	if database == nil {
+		return nil
+	}
+	_, err := database.ExecContext(ctx,
+		"UPDATE managed_sessions SET directory = ?, updated_at = ? WHERE id = ?",
+		directory, time.Now().Unix(), id,
+	)
+	return err
+}
+
+// updateSessionFields atomically updates any combination of profile, directory,
+// and mission in a single SQL statement. Pass nil for fields to leave unchanged.
+func updateSessionFields(ctx context.Context, id string, profile, directory, mission *string) error {
+	if database == nil {
+		return nil
+	}
+	setClauses := []string{"updated_at = ?"}
+	args := []interface{}{time.Now().Unix()}
+	if profile != nil {
+		setClauses = append(setClauses, "profile = ?")
+		args = append(args, nullableString(*profile))
+	}
+	if directory != nil {
+		setClauses = append(setClauses, "directory = ?")
+		args = append(args, nullableString(*directory))
+	}
+	if mission != nil {
+		setClauses = append(setClauses, "mission = ?")
+		args = append(args, nullableString(*mission))
+	}
+	if len(setClauses) == 1 {
+		return nil
+	}
+	args = append(args, id)
+	query := "UPDATE managed_sessions SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+	_, err := database.ExecContext(ctx, query, args...)
+	return err
+}
+
+func updateSessionContext(ctx context.Context, id, contextID, contextName string) error {
+	if database == nil {
+		return nil
+	}
+	_, err := database.ExecContext(ctx,
+		"UPDATE managed_sessions SET context_id = ?, context_name = ?, updated_at = ? WHERE id = ?",
+		nullableString(contextID), nullableString(contextName), time.Now().Unix(), id,
+	)
 	return err
 }
 

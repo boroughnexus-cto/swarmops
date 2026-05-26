@@ -3,14 +3,36 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"regexp"
+	"strings"
+	"time"
 )
 
 // uuidV4Pattern validates a canonical UUID v4 string.
 var uuidV4Pattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
+// defaultSessionModelFallback is the model used when neither the session record
+// nor SWARMOPS_DEFAULT_MODEL specifies one. Happier/Claude otherwise picks its
+// own default, which has been Opus-1M — too expensive for routine sessions.
+const defaultSessionModelFallback = "sonnet"
+
+// effectiveModel resolves the model string passed to happier --model.
+// Returns the explicit model if set; otherwise SWARMOPS_DEFAULT_MODEL; otherwise
+// defaultSessionModelFallback ("sonnet"). Always returns a non-empty string.
+func effectiveModel(model string) string {
+	if model != "" {
+		return model
+	}
+	if env := os.Getenv("SWARMOPS_DEFAULT_MODEL"); env != "" {
+		return env
+	}
+	return defaultSessionModelFallback
+}
 
 // generateUUID produces a random UUID v4 string using crypto/rand (no external dependency).
 func generateUUID() string {
@@ -27,45 +49,111 @@ func isValidUUID(s string) bool {
 	return uuidV4Pattern.MatchString(s)
 }
 
-// spawnSession creates a new tmux session and launches claude inside it.
-// The session is registered in the database and the tmux session is created
-// with the given working directory. Claude Code is started inside the session
-// with a controlled --session-id so it can be resumed after restarts.
-// An optional model string selects a specific Claude model (e.g. "claude-sonnet-4-6").
-func spawnSession(ctx context.Context, name, directory string, contextID, contextName, mission *string, model string) (*Session, error) {
-	s, err := createSession(ctx, name, directory, contextID, contextName, mission, false, model)
+// happierDaemonEntry is a minimal parse of one entry in the happier daemon list JSON array.
+type happierDaemonEntry struct {
+	HappySessionID string `json:"happySessionId"`
+}
+
+// listHappierSessionIDs returns the current set of happier session IDs from the daemon.
+func listHappierSessionIDs() map[string]bool {
+	out, err := exec.Command("happier", "daemon", "list", "--json").Output()
+	if err != nil {
+		return nil
+	}
+	// Output has a non-JSON prefix line ("Active sessions:"); find the JSON array.
+	raw := string(out)
+	idx := strings.Index(raw, "[")
+	if idx < 0 {
+		return nil
+	}
+	var entries []happierDaemonEntry
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw[idx:])), &entries); err != nil {
+		return nil
+	}
+	ids := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if e.HappySessionID != "" {
+			ids[e.HappySessionID] = true
+		}
+	}
+	return ids
+}
+
+// discoverNewHappierSession polls the daemon until a session appears that isn't in existing.
+// Returns the new session ID, or "" on timeout.
+func discoverNewHappierSession(existing map[string]bool, timeout time.Duration) string {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		for id := range listHappierSessionIDs() {
+			if !existing[id] {
+				return id
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return ""
+}
+
+// profileToHappierArgs returns the --profile flag args for happier, or nil if profile is empty.
+// Isolates all happier --profile CLI vocabulary to this single function.
+func profileToHappierArgs(profile string) []string {
+	if profile == "" {
+		return nil
+	}
+	return []string{"--profile", profile}
+}
+
+// spawnSession creates a new tmux session and launches happier inside it.
+// Sessions are launched via happier (--yolo) so they are visible in the happier
+// mobile app for remote control, regardless of the underlying LLM backend.
+// An optional profile string selects a happier backend profile (e.g. "deepseek", "openai").
+// An optional model string selects a specific model within the profile.
+// worktreePath, gitBranch, and repoPath are optional; pass nil for plain sessions.
+// envOverrides injects extra environment variables into the tmux session via -e flags.
+// Pass nil to inherit the swarmops process environment unchanged (default behavior).
+func spawnSession(ctx context.Context, name, directory string, contextID, contextName, mission *string, model, profile string, worktreePath, gitBranch, repoPath *string, envOverrides map[string]string) (*Session, error) {
+	s, err := createSession(ctx, name, directory, contextID, contextName, mission, false, model, profile, worktreePath, gitBranch, repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	// Generate a UUID for Claude's session so we can resume it later.
-	claudeUUID := generateUUID()
+	// Snapshot existing happier sessions before spawn so we can identify the new one.
+	preSpawnIDs := listHappierSessionIDs()
 
-	// Create tmux session with claude as the session command (no send-keys needed).
-	// Using "--" ensures claude flags aren't interpreted as tmux flags.
-	claudeArgs := []string{"claude", "--session-id", claudeUUID, "--dangerously-skip-permissions", "--remote-control", name}
-	if model != "" {
-		claudeArgs = append(claudeArgs, "--model", model)
-	}
-	tmuxArgs := append([]string{"new-session", "-d",
+	// Launch happier instead of claude directly. --yolo = --dangerously-skip-permissions.
+	// Profile flag routes to a non-Anthropic backend (deepseek, openai, gemini, etc.).
+	happierArgs := []string{"happier", "--yolo"}
+	happierArgs = append(happierArgs, profileToHappierArgs(profile)...)
+	happierArgs = append(happierArgs, "--model", effectiveModel(model))
+	tmuxArgs := []string{"new-session", "-d",
 		"-s", s.TmuxSession,
 		"-c", directory,
 		"-x", "200", "-y", "50",
-		"--",
-	}, claudeArgs...)
+	}
+	for k, v := range envOverrides {
+		tmuxArgs = append(tmuxArgs, "-e", fmt.Sprintf("%s=%s", k, v))
+	}
+	tmuxArgs = append(tmuxArgs, "--")
+	tmuxArgs = append(tmuxArgs, happierArgs...)
 	cmd := exec.Command("tmux", tmuxArgs...)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		// Clean up DB entry on failure
 		deleteSession(ctx, s.ID)
 		return nil, fmt.Errorf("tmux new-session: %v: %s", err, out)
 	}
 
-	// Store the Claude session ID for future resume
-	if err := updateClaudeSessionID(ctx, s.ID, claudeUUID); err != nil {
-		log.Printf("spawn: failed to store claude session ID for %s: %v", s.ID, err)
+	// Discover the happier session ID and set the session title in the mobile app.
+	if happierID := discoverNewHappierSession(preSpawnIDs, 10*time.Second); happierID != "" {
+		if name != "" {
+			exec.Command("happier", "session", "set-title", happierID, name).Run()
+		}
+		if err := updateClaudeSessionID(ctx, s.ID, happierID); err != nil {
+			log.Printf("spawn: failed to store happier session ID for %s: %v", s.ID, err)
+		}
+		s.ClaudeSessionID = &happierID
+		log.Printf("spawn: created session %q (tmux=%s, dir=%s, happier=%s, model=%s, profile=%s)", name, s.TmuxSession, directory, happierID, model, profile)
+	} else {
+		log.Printf("spawn: created session %q (tmux=%s, dir=%s, model=%s, profile=%s) — happier session ID discovery timed out", name, s.TmuxSession, directory, model, profile)
 	}
-	s.ClaudeSessionID = &claudeUUID
 
-	log.Printf("spawn: created session %q (tmux=%s, dir=%s, claude=%s, model=%s)", name, s.TmuxSession, directory, claudeUUID, model)
 	return s, nil
 }

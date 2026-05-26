@@ -82,6 +82,7 @@ type sidebarItem struct {
 	mission         string // optional mission statement
 	directory       string // working directory for session restart
 	claudeSessionID string // Claude session ID for resume
+	profile         string // happier backend profile (empty = anthropic default)
 	// Pool slot fields
 	slotID   string
 	model    string // claude model override (session) or pool model name (pool slot)
@@ -106,6 +107,12 @@ type itemsMsg struct {
 }
 type activityCaptureMsg struct {
 	captures []sessionCapture
+}
+type profileRestartDoneMsg struct {
+	sessionID    string
+	sessionLabel string
+	profileLabel string
+	happierFound bool // true if new happier session ID was discovered
 }
 
 type contextItem struct {
@@ -133,18 +140,20 @@ const (
 	modeFeedbackType
 	modeFeedbackText
 	modeAuditLog
+	modeEditProfile // change profile and restart session
+	modeEditDir     // change working directory for a session
 )
 
 // Spawner abstracts session creation for testability.
 type Spawner interface {
-	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model string) (*Session, error)
+	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error)
 }
 
 // defaultSpawner calls the real spawnSession function.
 type defaultSpawner struct{}
 
-func (defaultSpawner) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model string) (*Session, error) {
-	return spawnSession(ctx, name, dir, contextID, contextName, mission, model)
+func (defaultSpawner) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error) {
+	return spawnSession(ctx, name, dir, contextID, contextName, mission, model, profile, nil, nil, nil, nil)
 }
 
 type tuiModel struct {
@@ -160,9 +169,13 @@ type tuiModel struct {
 	newNameInput    textinput.Model
 	newDirInput     textinput.Model
 	newMissionInput textinput.Model
-	newModel        int    // 0=default, 1=haiku, 2=sonnet, 3=opus
+	newModel        int    // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
 	contexts        []contextItem
 	ctxCursor       int
+
+	// Edit profile / edit directory inputs
+	editProfileIdx int           // index in profileOptions slice
+	editDirInput   textinput.Model
 
 	// Pool section display
 	poolExpanded bool // expanded in sidebar; default false (collapsed, SWM-49)
@@ -170,6 +183,9 @@ type tuiModel struct {
 	// Per-session activity state for diff detection and 1-tick damper
 	activityStates    map[string]*activityState
 	activityInflight  bool // true while a captureActivityCmd is running
+
+	// Sessions currently undergoing a profile-switch restart (guards against concurrent restarts)
+	restartingSessionIDs map[string]bool
 
 	// Terminal content cache
 	termContent string
@@ -258,6 +274,10 @@ func initialModel(api swarmClient) tuiModel {
 	fi2.Placeholder = "Describe the bug or feature..."
 	fi2.CharLimit = 256
 
+	edi := textinput.New()
+	edi.Placeholder = "Working directory"
+	edi.CharLimit = 256
+
 	var spawner Spawner
 	if api != nil {
 		spawner = api
@@ -273,9 +293,11 @@ func initialModel(api swarmClient) tuiModel {
 		popupFilter:     fi,
 		renameInput:     ri,
 		feedbackInput:   fi2,
-		activityStates:  make(map[string]*activityState),
-		spawner:         spawner,
-		api:             api,
+		editDirInput:    edi,
+		activityStates:       make(map[string]*activityState),
+		restartingSessionIDs: make(map[string]bool),
+		spawner:              spawner,
+		api:                  api,
 	}
 }
 
@@ -380,6 +402,7 @@ func loadItemsCmd(api swarmClient) tea.Cmd {
 				activity:        activity,
 				mission:         mission,
 				model:           s.Model,
+				profile:         s.Profile,
 				directory:       s.Directory,
 				claudeSessionID: func() string { if s.ClaudeSessionID != nil { return *s.ClaudeSessionID }; return "" }(),
 			})
@@ -469,6 +492,28 @@ func toInt64(v interface{}) int64 {
 		return i
 	default:
 		return 0
+	}
+}
+
+// restartSessionWithProfileCmd runs the kill-sleep-restart sequence in a
+// goroutine (tea.Cmd) so the Bubbletea event loop is never blocked.
+func restartSessionWithProfileCmd(tmuxSess, sessionID, name string, happierParts []string, profileLabel string) tea.Cmd {
+	return func() tea.Msg {
+		pre := listHappierSessionIDs()
+		exec.Command("tmux", "send-keys", "-t", tmuxSess, "C-c").Run()
+		time.Sleep(200 * time.Millisecond)
+		exec.Command("tmux", "send-keys", "-t", tmuxSess, "C-c").Run()
+		time.Sleep(200 * time.Millisecond)
+		exec.Command("tmux", "send-keys", "-t", tmuxSess, "exit", "Enter").Run()
+		time.Sleep(500 * time.Millisecond)
+		exec.Command("tmux", "send-keys", "-t", tmuxSess, strings.Join(happierParts, " "), "Enter").Run()
+		found := false
+		if newID := discoverNewHappierSession(pre, 15*time.Second); newID != "" {
+			found = true
+			updateClaudeSessionID(context.Background(), sessionID, newID)
+			exec.Command("happier", "session", "set-title", newID, name).Run()
+		}
+		return profileRestartDoneMsg{sessionID: sessionID, sessionLabel: name, profileLabel: profileLabel, happierFound: found}
 	}
 }
 
@@ -564,6 +609,15 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case flashClearMsg:
 		m.flash = ""
 		return m, nil
+
+	case profileRestartDoneMsg:
+		delete(m.restartingSessionIDs, msg.sessionID)
+		if msg.happierFound {
+			m.flash = fmt.Sprintf("Restarted %s with profile: %s", msg.sessionLabel, msg.profileLabel)
+		} else {
+			m.flash = fmt.Sprintf("Restarted %s (profile: %s, session ID not synced)", msg.sessionLabel, msg.profileLabel)
+		}
+		return m, flashClearCmd()
 
 	case itemsMsg:
 		// Classify activity in the Update loop (single-threaded) using captures from the command
@@ -785,7 +839,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 									dir = h
 								}
 							}
-							cArgs := resumeClaudeCmd(item.claudeSessionID, item.label)
+							cArgs := resumeClaudeCmd(item.claudeSessionID, item.model)
 							args := append([]string{"new-session", "-d", "-s", item.tmuxSession, "-c", dir, "-x", "200", "-y", "50", "--"}, cArgs...)
 							if out, err := exec.Command("tmux", args...).CombinedOutput(); err != nil {
 								m.flash = fmt.Sprintf("Failed to recreate tmux session: %s", strings.TrimSpace(string(out)))
@@ -808,7 +862,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					time.Sleep(200 * time.Millisecond)
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, "exit", "Enter").Run()
 					time.Sleep(500 * time.Millisecond)
-					cArgs := resumeClaudeCmd(item.claudeSessionID, item.label)
+					cArgs := resumeClaudeCmd(item.claudeSessionID, item.model)
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, strings.Join(cArgs, " "), "Enter").Run()
 					go compactWatcher(item.tmuxSession, 90*time.Second)
 					m.flash = fmt.Sprintf("Reconnecting %s (MCPs reloading, history restored)", item.label)
@@ -827,11 +881,18 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					time.Sleep(200 * time.Millisecond)
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, "exit", "Enter").Run()
 					time.Sleep(500 * time.Millisecond)
-					rcCmd := "claude --dangerously-skip-permissions"
-					if item.label != "" {
-						rcCmd += " --remote-control " + item.label
-					}
-					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, rcCmd, "Enter").Run() // Alt+Shift+S: fresh start
+					parts := []string{"happier", "--yolo"}
+					parts = append(parts, profileToHappierArgs(item.profile)...)
+					parts = append(parts, "--model", effectiveModel(item.model))
+					preIDs := listHappierSessionIDs()
+					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, strings.Join(parts, " "), "Enter").Run()
+					// Discover new happier ID and set title (fresh start creates a new session)
+					go func(sessionID, name string, pre map[string]bool) {
+						if newID := discoverNewHappierSession(pre, 15*time.Second); newID != "" {
+							updateClaudeSessionID(context.Background(), sessionID, newID)
+							exec.Command("happier", "session", "set-title", newID, name).Run()
+						}
+					}(item.sessionID, item.label, preIDs)
 					m.flash = fmt.Sprintf("Restarted Claude in %s", item.label)
 				}
 				return m, nil
@@ -852,6 +913,26 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.newMissionInput.SetValue(m.items[m.cursor].mission)
 				m.newMissionInput.Focus()
 				m.flash = "Edit mission (esc to cancel, enter to save)"
+				return m, textinput.Blink
+			}
+			return m, nil
+		case "alt+k":
+			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
+				item := m.items[m.cursor]
+				// Set picker to current profile
+				m.editProfileIdx = profileIndexFromString(item.profile)
+				m.mode = modeEditProfile
+				m.flash = profilePickerFlash(m.editProfileIdx)
+			}
+			return m, nil
+		case "alt+g":
+			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
+				item := m.items[m.cursor]
+				m.editDirInput.SetValue(item.directory)
+				m.editDirInput.SetCursor(len(item.directory))
+				m.editDirInput.Focus()
+				m.mode = modeEditDir
+				m.flash = "Edit directory (tab to complete, enter to save, esc to cancel)"
 				return m, textinput.Blink
 			}
 			return m, nil
@@ -1035,7 +1116,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "right", "alt+z", "l":
-			if m.newModel < 3 {
+			if m.newModel < len(backendOptions)-1 {
 				m.newModel++
 				m.flash = modelPickerFlash(m.newModel)
 			}
@@ -1098,6 +1179,111 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		default:
 			var cmd tea.Cmd
 			m.newMissionInput, cmd = m.newMissionInput.Update(msg)
+			return m, cmd
+		}
+
+	case modeEditProfile:
+		switch key {
+		case "left", "alt+a", "h":
+			if m.editProfileIdx > 0 {
+				m.editProfileIdx--
+				m.flash = profilePickerFlash(m.editProfileIdx)
+			}
+			return m, nil
+		case "right", "alt+z", "l":
+			if m.editProfileIdx < len(backendOptions)-1 {
+				m.editProfileIdx++
+				m.flash = profilePickerFlash(m.editProfileIdx)
+			}
+			return m, nil
+		case "enter":
+			if m.editProfileIdx < 0 || m.editProfileIdx >= len(backendOptions) {
+				m.mode = modePassthrough
+				return m, nil
+			}
+			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
+				item := m.items[m.cursor]
+				if m.restartingSessionIDs[item.sessionID] {
+					m.flash = fmt.Sprintf("%s is already restarting", item.label)
+					m.mode = modePassthrough
+					return m, flashClearCmd()
+				}
+				opt := backendOptions[m.editProfileIdx]
+				// Persist profile change; abort restart if DB write fails
+				var dbErr error
+				if m.api != nil {
+					dbErr = m.api.updateSessionProfile(item.sessionID, opt.profile)
+				} else {
+					dbErr = updateSessionProfile(context.Background(), item.sessionID, opt.profile)
+				}
+				if dbErr != nil {
+					m.flash = fmt.Sprintf("Failed to save profile: %v", dbErr)
+					m.mode = modePassthrough
+					return m, flashClearCmd()
+				}
+				// Build restart command with new profile
+				happierParts := []string{"happier", "--yolo"}
+				happierParts = append(happierParts, profileToHappierArgs(opt.profile)...)
+				if opt.model != "" {
+					happierParts = append(happierParts, "--model", opt.model)
+				} else {
+					happierParts = append(happierParts, "--model", effectiveModel(""))
+				}
+				m.restartingSessionIDs[item.sessionID] = true
+				m.flash = fmt.Sprintf("Restarting %s with profile: %s...", item.label, opt.label)
+				m.mode = modePassthrough
+				return m, tea.Batch(
+					loadItemsCmd(m.api),
+					restartSessionWithProfileCmd(item.tmuxSession, item.sessionID, item.label, happierParts, opt.label),
+				)
+			}
+			m.mode = modePassthrough
+			return m, loadItemsCmd(m.api)
+		case "esc":
+			m.mode = modePassthrough
+			m.flash = ""
+		}
+
+	case modeEditDir:
+		switch key {
+		case "enter":
+			newDir := m.editDirInput.Value()
+			if newDir != "" && m.cursor < len(m.items) {
+				item := m.items[m.cursor]
+				if _, err := os.Stat(newDir); err != nil {
+					m.flash = fmt.Sprintf("Directory does not exist: %s", newDir)
+					return m, flashClearCmd()
+				}
+				if m.api != nil {
+					m.api.updateSessionDirectory(item.sessionID, newDir)
+				} else {
+					updateSessionDirectory(context.Background(), item.sessionID, newDir)
+				}
+				m.flash = fmt.Sprintf("Directory updated (takes effect on next restart)")
+			}
+			m.mode = modePassthrough
+			return m, tea.Batch(loadItemsCmd(m.api), flashClearCmd())
+		case "esc":
+			m.mode = modePassthrough
+			m.flash = ""
+		case "tab":
+			val := m.editDirInput.Value()
+			if val != "" {
+				matches, _ := filepath.Glob(val + "*")
+				if len(matches) == 1 {
+					completed := matches[0]
+					info, err := os.Stat(completed)
+					if err == nil && info.IsDir() {
+						completed += "/"
+					}
+					m.editDirInput.SetValue(completed)
+					m.editDirInput.SetCursor(len(completed))
+				}
+			}
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.editDirInput, cmd = m.editDirInput.Update(msg)
 			return m, cmd
 		}
 
@@ -1432,7 +1618,8 @@ func (m *tuiModel) doSpawn(contextID, contextName *string) {
 		mission = &v
 	}
 	model := modelIDFromIndex(m.newModel)
-	s, err := m.spawner.Spawn(context.Background(), name, dir, contextID, contextName, mission, model)
+	profile := profileFromIndex(m.newModel)
+	s, err := m.spawner.Spawn(context.Background(), name, dir, contextID, contextName, mission, model, profile)
 	if err != nil {
 		m.flash = "Spawn error: " + err.Error()
 	} else {
@@ -1453,7 +1640,7 @@ func (m *tuiModel) doDispatch(prompt string) {
 	} else {
 		// Spawn new session
 		name := sanitizeSessionName(m.actionTarget)
-		s, err := m.spawner.Spawn(context.Background(), name, os.Getenv("HOME"), nil, nil, nil, "")
+		s, err := m.spawner.Spawn(context.Background(), name, os.Getenv("HOME"), nil, nil, nil, "", "")
 		if err != nil {
 			m.flash = "Spawn error: " + err.Error()
 		} else {
@@ -1658,6 +1845,10 @@ func (m tuiModel) View() string {
 		statusLine = "Mission: " + m.newMissionInput.View()
 	case modeRename:
 		statusLine = "Rename: " + m.renameInput.View()
+	case modeEditProfile:
+		statusLine = profilePickerFlash(m.editProfileIdx)
+	case modeEditDir:
+		statusLine = "Dir: " + m.editDirInput.View()
 	case modeFeedbackType:
 		kinds := []string{"🐛 Bug", "✨ Feature"}
 		var parts []string
@@ -1677,7 +1868,7 @@ func (m tuiModel) View() string {
 		if m.flash != "" {
 			statusLine = dimStyle.Render(m.flash)
 		} else {
-			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+D delete") + "\n" +
+			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+K profile │ Alt+G dir │ Alt+D delete") + "\n" +
 				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+Q quit")
 		}
 	}
@@ -2218,33 +2409,76 @@ func animatedIndicator(activity string, frame int) string {
 		return statusStopped
 	}
 }
-// modelIDFromIndex maps the model picker index to a Claude model string.
-// 0 = default (empty string), 1 = haiku, 2 = sonnet, 3 = opus.
-func modelIDFromIndex(idx int) string {
-	switch idx {
-	case 1:
-		return "claude-haiku-4-5-20251001"
-	case 2:
-		return "claude-sonnet-4-6"
-	case 3:
-		return "claude-opus-4-6"
-	default:
-		return ""
-	}
+// backendOption describes one entry in the unified model+profile picker.
+type backendOption struct {
+	label   string // display name
+	model   string // claude model override (empty = default for profile)
+	profile string // happier backend profile (empty = anthropic)
 }
 
-// modelPickerFlash returns the status bar message for the model picker step.
-func modelPickerFlash(idx int) string {
-	names := []string{"default", "haiku", "sonnet", "opus"}
-	var parts []string
-	for i, name := range names {
-		if i == idx {
-			parts = append(parts, "["+name+"]")
-		} else {
-			parts = append(parts, name)
+// backendOptions is the ordered list of backend choices presented in the new-session
+// wizard (modeNewModel) and the per-session profile editor (modeEditProfile).
+// Indices: 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
+var backendOptions = []backendOption{
+	{label: "default", model: "", profile: ""},
+	{label: "haiku", model: "claude-haiku-4-5-20251001", profile: ""},
+	{label: "sonnet", model: "claude-sonnet-4-6", profile: ""},
+	{label: "opus", model: "claude-opus-4-6", profile: ""},
+	{label: "deepseek", model: "", profile: "deepseek"},
+	{label: "openai", model: "", profile: "openai"},
+}
+
+// modelIDFromIndex returns the Claude model string for picker index idx.
+func modelIDFromIndex(idx int) string {
+	if idx >= 0 && idx < len(backendOptions) {
+		return backendOptions[idx].model
+	}
+	return ""
+}
+
+// profileFromIndex returns the happier profile string for picker index idx.
+func profileFromIndex(idx int) string {
+	if idx >= 0 && idx < len(backendOptions) {
+		return backendOptions[idx].profile
+	}
+	return ""
+}
+
+// profileIndexFromString returns the backendOptions index for a given profile string.
+// Falls back to 0 (default) if not found.
+func profileIndexFromString(profile string) int {
+	for i, opt := range backendOptions {
+		if opt.profile == profile {
+			return i
 		}
 	}
-	return "Model: " + strings.Join(parts, " │ ") + "  (←/→ to pick, Enter to continue)"
+	return 0
+}
+
+// modelPickerFlash returns the status bar message for the model/backend picker step.
+func modelPickerFlash(idx int) string {
+	var parts []string
+	for i, opt := range backendOptions {
+		if i == idx {
+			parts = append(parts, "["+opt.label+"]")
+		} else {
+			parts = append(parts, opt.label)
+		}
+	}
+	return "Backend: " + strings.Join(parts, " │ ") + "  (←/→ to pick, Enter to continue)"
+}
+
+// profilePickerFlash returns the status bar message for the profile edit mode.
+func profilePickerFlash(idx int) string {
+	var parts []string
+	for i, opt := range backendOptions {
+		if i == idx {
+			parts = append(parts, "["+opt.label+"]")
+		} else {
+			parts = append(parts, opt.label)
+		}
+	}
+	return "Profile: " + strings.Join(parts, " │ ") + "  (←/→ to pick, Enter to apply+restart, Esc to cancel)"
 }
 
 func runTUI(api swarmClient) error {
@@ -2253,18 +2487,14 @@ func runTUI(api swarmClient) error {
 	return err
 }
 
-// resumeClaudeCmd returns the claude command args for restarting a session.
-// If a claude session ID is available, uses --resume; otherwise starts fresh.
-// If name is non-empty, --remote-control <name> is added so the session is
-// addressable by name via Claude Code's remote control feature.
-func resumeClaudeCmd(claudeID, name string) []string {
-	args := []string{"claude"}
-	if claudeID != "" && isValidUUID(claudeID) {
-		args = append(args, "--resume", claudeID)
+// resumeClaudeCmd returns the happier command args for restarting a session.
+// If a happier session ID is available (non-UUID format), uses --existing-session.
+// Old UUID-format IDs (pre-happier) are silently ignored and a fresh session starts.
+func resumeClaudeCmd(claudeID, model string) []string {
+	args := []string{"happier", "--yolo"}
+	if claudeID != "" && !isValidUUID(claudeID) {
+		args = append(args, "--existing-session", claudeID)
 	}
-	args = append(args, "--dangerously-skip-permissions")
-	if name != "" {
-		args = append(args, "--remote-control", name)
-	}
+	args = append(args, "--model", effectiveModel(model))
 	return args
 }

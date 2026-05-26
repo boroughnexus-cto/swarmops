@@ -89,18 +89,104 @@ func (s *Services) GetExecution(ctx context.Context, id string) (*Session, error
 // RunTask creates and starts a new session.
 // contextID, contextName, and mission are optional (pass nil/empty to skip).
 // model is optional (empty string falls back to the default in spawnSession).
-func (s *Services) RunTask(ctx context.Context, name, directory string, contextID, contextName, mission *string, model string) (*Session, error) {
+// profile is optional; sets the happier backend profile (e.g. "deepseek", "openai").
+// taskBrief is optional; if non-empty, TASK.md is written to directory before spawn.
+// envOverrides injects extra env vars into the session (e.g. ANTHROPIC_BASE_URL for LiteLLM routing).
+// Pass nil to inherit the swarmops process environment unchanged (default, existing behaviour).
+func (s *Services) RunTask(ctx context.Context, name, directory string, contextID, contextName, mission *string, model, profile, taskBrief string, envOverrides map[string]string) (*Session, error) {
 	if name == "" {
 		name = "session-" + generateID()
 	}
 	if directory == "" {
 		directory = "."
 	}
-	return spawnSession(ctx, name, directory, contextID, contextName, mission, model)
+	if taskBrief != "" {
+		if err := writeTaskMD(directory, taskBrief); err != nil {
+			return nil, fmt.Errorf("write TASK.md: %w", err)
+		}
+	}
+	return spawnSession(ctx, name, directory, contextID, contextName, mission, model, profile, nil, nil, nil, envOverrides)
+}
+
+// SpawnAgent atomically creates a git worktree, writes an optional TASK.md,
+// and spawns a Claude Code session inside the worktree.
+// On any failure after worktree creation, the worktree is removed (rollback).
+// profile is optional; sets the happier backend profile (e.g. "deepseek", "openai").
+// envOverrides injects extra env vars into the session (e.g. ANTHROPIC_BASE_URL for LiteLLM routing).
+// Pass nil to inherit the swarmops process environment unchanged (default, existing behaviour).
+func (s *Services) SpawnAgent(ctx context.Context, name, repoPath, worktreePath, branch string, contextID, contextName, mission *string, model, profile, taskBrief string, envOverrides map[string]string) (*Session, error) {
+	if name == "" {
+		name = "agent-" + generateID()
+	}
+	if worktreePath == "" {
+		worktreePath = resolveWorktreePath(defaultWorktreeBase(repoPath), name)
+	}
+	if branch == "" {
+		branch = worktreeBranchName(worktreePath)
+	}
+
+	if err := createWorktree(repoPath, worktreePath, branch); err != nil {
+		return nil, fmt.Errorf("create worktree: %w", err)
+	}
+
+	if taskBrief != "" {
+		if err := writeTaskMD(worktreePath, taskBrief); err != nil {
+			removeWorktree(repoPath, worktreePath, branch, false, true) // rollback (safe: worktree is empty)
+			return nil, fmt.Errorf("write TASK.md: %w", err)
+		}
+	}
+
+	sess, err := spawnSession(ctx, name, worktreePath, contextID, contextName, mission, model, profile, &worktreePath, &branch, &repoPath, envOverrides)
+	if err != nil {
+		// spawnSession handles its own internal DB rollback; we only need to clean up the worktree.
+		// Also defensively attempt DB cleanup in case spawnSession left a partial record.
+		removeWorktree(repoPath, worktreePath, branch, false, true) // rollback
+		return nil, fmt.Errorf("spawn session: %w", err)
+	}
+	return sess, nil
+}
+
+// TeardownAgent removes the git worktree and branch for an agent session, then
+// deletes the session record. Worktree cleanup happens before DB deletion so
+// that a failed filesystem cleanup can be retried by calling TeardownAgent again.
+// If the session has no associated worktree (plain rc_run_task session), only the
+// session record is deleted.
+func (s *Services) TeardownAgent(ctx context.Context, id string, deleteBranch bool) error {
+	sess, err := getSession(ctx, id)
+	if err != nil {
+		return fmt.Errorf("session not found: %s", id)
+	}
+
+	// Clean up worktree before deleting the DB record so retry is possible
+	// if the filesystem operation fails.
+	if sess.WorktreePath != nil && sess.RepoPath != nil {
+		branch := ""
+		if sess.GitBranch != nil {
+			branch = *sess.GitBranch
+		}
+		if err := removeWorktree(*sess.RepoPath, *sess.WorktreePath, branch, true, deleteBranch); err != nil {
+			return fmt.Errorf("remove worktree: %w", err)
+		}
+	}
+
+	// deleteSession kills tmux (idempotent) and removes the DB record.
+	return deleteSession(ctx, id)
 }
 
 func (s *Services) UpdateSessionMission(ctx context.Context, id, mission string) error {
 	return updateSessionMission(ctx, id, mission)
+}
+
+func (s *Services) UpdateSessionProfile(ctx context.Context, id, profile string) error {
+	return updateSessionProfile(ctx, id, profile)
+}
+
+func (s *Services) UpdateSessionDirectory(ctx context.Context, id, directory string) error {
+	return updateSessionDirectory(ctx, id, directory)
+}
+
+func (s *Services) UpdateSessionContext(ctx context.Context, id, contextID, contextName string) error {
+	return updateSessionContext(ctx, id, contextID, contextName)
 }
 
 func (s *Services) SendInput(ctx context.Context, sessionID, input string) error {
@@ -149,7 +235,7 @@ func (s *Services) StartSession(ctx context.Context, id string) error {
 		if sess.ClaudeSessionID != nil {
 			claudeID = *sess.ClaudeSessionID
 		}
-		cArgs := resumeClaudeCmd(claudeID, sess.Name)
+		cArgs := resumeClaudeCmd(claudeID, sess.Model)
 		args := append([]string{"new-session", "-d", "-s", sess.TmuxSession, "-c", dir, "-x", "200", "-y", "50", "--"}, cArgs...)
 		if out, err := exec.Command("tmux", args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to recreate tmux session: %s", strings.TrimSpace(string(out)))
@@ -159,7 +245,7 @@ func (s *Services) StartSession(ctx context.Context, id string) error {
 		if sess.ClaudeSessionID != nil {
 			claudeID = *sess.ClaudeSessionID
 		}
-		cArgs := resumeClaudeCmd(claudeID, sess.Name)
+		cArgs := resumeClaudeCmd(claudeID, sess.Model)
 		exec.Command("tmux", append([]string{"send-keys", "-t", sess.TmuxSession}, append(cArgs, "")...)...).Run()
 		exec.Command("tmux", "send-keys", "-t", sess.TmuxSession, strings.Join(cArgs, " "), "Enter").Run()
 	}

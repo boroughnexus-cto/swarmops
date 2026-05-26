@@ -21,7 +21,7 @@ func TestCreateSession_AllFields(t *testing.T) {
 	model := "claude-sonnet-4-6"
 
 	sess, err := createSession(ctx, "my-named-session", "/tmp/work-dir",
-		&ctxID, &ctxName, &mission, false, model)
+		&ctxID, &ctxName, &mission, false, model, "", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("createSession: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestCreateSession_NilOptionals(t *testing.T) {
 	defer setupTestDB(t)()
 	ctx := context.Background()
 
-	sess, err := createSession(ctx, "minimal", "/tmp", nil, nil, nil, false, "")
+	sess, err := createSession(ctx, "minimal", "/tmp", nil, nil, nil, false, "", "", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("createSession: %v", err)
 	}

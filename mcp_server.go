@@ -303,6 +303,29 @@ func getBoolArg(args map[string]interface{}, key string, def bool) bool {
 	return b
 }
 
+// getStringMapArg extracts a map[string]string from tool arguments (e.g. env_overrides).
+// Returns nil if the key is absent or the value is not a JSON object with string values.
+func getStringMapArg(args map[string]interface{}, key string) map[string]string {
+	v, ok := args[key]
+	if !ok {
+		return nil
+	}
+	obj, ok := v.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	result := make(map[string]string, len(obj))
+	for k, val := range obj {
+		if s, ok := val.(string); ok {
+			result[k] = s
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
 // getStringSliceArg extracts a []string from tool arguments.
 func getStringSliceArg(args map[string]interface{}, key string) []string {
 	v, ok := args[key]

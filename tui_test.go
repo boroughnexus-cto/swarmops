@@ -35,7 +35,7 @@ type spawnCall struct {
 	mission                *string
 }
 
-func (m *mockSpawner) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model string) (*Session, error) {
+func (m *mockSpawner) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error) {
 	m.calls = append(m.calls, spawnCall{name, dir, contextID, contextName, mission})
 	if m.err != nil {
 		return nil, m.err
@@ -1272,7 +1272,7 @@ type fakeSwarmClient struct {
 	Calls []string // e.g. "Spawn", "listSessions", "deleteSession:id"
 }
 
-func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model string) (*Session, error) {
+func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error) {
 	f.Calls = append(f.Calls, "Spawn")
 	if f.SpawnErr != nil {
 		return nil, f.SpawnErr
@@ -1280,6 +1280,14 @@ func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, contextID, 
 	s := &Session{ID: "fake-id", Name: name, Directory: dir}
 	f.Sessions = append(f.Sessions, *s)
 	return s, nil
+}
+func (f *fakeSwarmClient) updateSessionProfile(id, profile string) error {
+	f.Calls = append(f.Calls, "updateSessionProfile:"+id)
+	return nil
+}
+func (f *fakeSwarmClient) updateSessionDirectory(id, directory string) error {
+	f.Calls = append(f.Calls, "updateSessionDirectory:"+id)
+	return nil
 }
 func (f *fakeSwarmClient) listSessions() ([]Session, error) {
 	f.Calls = append(f.Calls, "listSessions")

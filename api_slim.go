@@ -119,7 +119,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		if req.Directory == "" {
 			req.Directory = "."
 		}
-		s, err := spawnSession(ctx, req.Name, req.Directory, nil, nil, nil, req.Model)
+		s, err := spawnSession(ctx, req.Name, req.Directory, nil, nil, nil, req.Model, "", nil, nil, nil, nil)
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
 			return
@@ -316,7 +316,7 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 			if req.Directory == "" {
 				req.Directory = "."
 			}
-			s, err := spawnSession(ctx, req.Name, req.Directory, req.ContextID, nil, req.Mission, req.Model)
+			s, err := spawnSession(ctx, req.Name, req.Directory, req.ContextID, nil, req.Mission, req.Model, "", nil, nil, nil, nil)
 			if err != nil {
 				http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
 				return
@@ -352,8 +352,10 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 
 		case http.MethodPatch:
 			var body struct {
-				Name    string  `json:"name"`
-				Mission *string `json:"mission"`
+				Name      string  `json:"name"`
+				Mission   *string `json:"mission"`
+				Profile   *string `json:"profile"`
+				Directory *string `json:"directory"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
@@ -365,8 +367,8 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 					return
 				}
 			}
-			if body.Mission != nil {
-				if err := updateSessionMission(ctx, sessionID, *body.Mission); err != nil {
+			if body.Mission != nil || body.Profile != nil || body.Directory != nil {
+				if err := updateSessionFields(ctx, sessionID, body.Profile, body.Directory, body.Mission); err != nil {
 					http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
 					return
 				}

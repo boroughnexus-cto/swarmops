@@ -13,13 +13,15 @@ import (
 // swarmClient is the interface the TUI uses to talk to the SwarmOps backend.
 // The concrete implementation is apiClient (HTTP). Tests use fakeSwarmClient.
 type swarmClient interface {
-	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model string) (*Session, error)
+	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error)
 	listSessions() ([]Session, error)
 	deleteSession(id string) error
 	renameSession(id, name string) error
 	poolStatus() (map[string]interface{}, error)
 	getConfig(key string) (string, error)
 	setMission(id, mission string) error
+	updateSessionProfile(id, profile string) error
+	updateSessionDirectory(id, directory string) error
 	listAuditEvents(limit int) ([]ManagedSessionEvent, error)
 	healthCheck() error
 }
@@ -39,7 +41,7 @@ func newAPIClient(baseURL string) *apiClient {
 }
 
 // Spawn implements the Spawner interface via the HTTP API.
-func (c *apiClient) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model string) (*Session, error) {
+func (c *apiClient) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error) {
 	body := map[string]interface{}{
 		"name":      name,
 		"directory": dir,
@@ -52,6 +54,9 @@ func (c *apiClient) Spawn(ctx context.Context, name, dir string, contextID, cont
 	}
 	if model != "" {
 		body["model"] = model
+	}
+	if profile != "" {
+		body["profile"] = profile
 	}
 
 	data, err := json.Marshal(body)
@@ -165,6 +170,42 @@ func (c *apiClient) getConfig(key string) (string, error) {
 
 func (c *apiClient) setMission(id, mission string) error {
 	data, _ := json.Marshal(map[string]interface{}{"mission": mission})
+	req, err := http.NewRequest("PATCH", c.baseURL+"/api/swarm/sessions/"+id, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("API %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *apiClient) updateSessionProfile(id, profile string) error {
+	data, _ := json.Marshal(map[string]string{"profile": profile})
+	req, err := http.NewRequest("PATCH", c.baseURL+"/api/swarm/sessions/"+id, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("API %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *apiClient) updateSessionDirectory(id, directory string) error {
+	data, _ := json.Marshal(map[string]string{"directory": directory})
 	req, err := http.NewRequest("PATCH", c.baseURL+"/api/swarm/sessions/"+id, bytes.NewReader(data))
 	if err != nil {
 		return err
