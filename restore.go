@@ -41,6 +41,14 @@ func restoreSessions(ctx context.Context) {
 		}
 		args = append(args, "--")
 		args = append(args, cArgs...)
+		// Snapshot happier session ids before launch so we can identify the
+		// fresh one this relaunch creates. Restore drops --existing-session
+		// (see buildClaudeRestoreArgs), so happier always makes a NEW session
+		// with a NEW id — which is why the stored claude_session_id goes stale
+		// and the app loses the title, falling back to the cwd. We rebind both
+		// below. Done synchronously, one session at a time, so the "new id" is
+		// unambiguous even though the loop restores many sessions.
+		preIDs := listHappierSessionIDs()
 		if out, err := exec.Command("tmux", args...).CombinedOutput(); err != nil {
 			log.Printf("restore: tmux for %s: %v: %s", s.Name, err, out)
 			updateSessionStatus(ctx, s.ID, "stopped")
@@ -49,6 +57,10 @@ func restoreSessions(ctx context.Context) {
 		if isTmuxAlive(s.TmuxSession) {
 			updateSessionStatus(ctx, s.ID, "running")
 			restored++
+			// Rebind the new happier session id + reapply the SwarmOps name as
+			// the app title. Without this the restored session shows its
+			// working-directory basename instead of its SwarmOps name.
+			syncHappierIdentity(ctx, s.ID, s.Name, preIDs, 15*time.Second)
 			// Inject orientation prompt after Claude has had time to initialise.
 			// Stagger by session index so restores don't all fire at the same instant.
 			delay := 12*time.Second + time.Duration(i)*3*time.Second
