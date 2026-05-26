@@ -35,7 +35,12 @@ func restoreSessions(ctx context.Context) {
 		}
 		updateSessionStatus(ctx, s.ID, "restoring")
 		cArgs := buildClaudeRestoreArgs(ctx, &s)
-		args := append([]string{"new-session", "-d", "-s", s.TmuxSession, "-c", dir, "-x", "200", "-y", "50", "--"}, cArgs...)
+		args := []string{"new-session", "-d", "-s", s.TmuxSession, "-c", dir, "-x", "200", "-y", "50"}
+		for k, v := range restoreEnvFor(&s) {
+			args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+		}
+		args = append(args, "--")
+		args = append(args, cArgs...)
 		if out, err := exec.Command("tmux", args...).CombinedOutput(); err != nil {
 			log.Printf("restore: tmux for %s: %v: %s", s.Name, err, out)
 			updateSessionStatus(ctx, s.ID, "stopped")
@@ -85,6 +90,27 @@ func buildClaudeRestoreArgs(ctx context.Context, s *Session) []string {
 		args = append(args, "--existing-session", *s.ClaudeSessionID)
 	}
 	args = append(args, profileToHappierArgs(s.Profile)...)
-	args = append(args, "--model", effectiveModel(s.Model))
+	// Model is passed via ANTHROPIC_MODEL in restoreEnvFor — happier's --model
+	// flag triggers a hook-file race that kills the spawned claude.
 	return args
+}
+
+// restoreEnvFor returns the env vars that should be re-injected when a
+// persisted session is restored after a SwarmOps restart. Always sets
+// ANTHROPIC_MODEL; for sessions whose names mark them as LiteLLM-routed
+// ([gpt] or [dseek] prefix), also restores the LiteLLM endpoint env so the
+// resumed claude process targets the same backend it was created with.
+func restoreEnvFor(s *Session) map[string]string {
+	env := map[string]string{"ANTHROPIC_MODEL": effectiveModel(s.Model)}
+	switch {
+	case strings.HasPrefix(s.Name, "[gpt]"), strings.HasPrefix(s.Name, "[dseek]"):
+		for k, v := range litellmEnvOverrides("") {
+			env[k] = v
+		}
+		// Re-apply the explicit model the session was created with so the
+		// LiteLLM backend stays consistent across restarts. effectiveModel
+		// returns the configured fallback when s.Model is empty.
+		env["ANTHROPIC_MODEL"] = effectiveModel(s.Model)
+	}
+	return env
 }

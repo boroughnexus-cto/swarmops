@@ -144,11 +144,14 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 		// settings file before the spawned claude can read it (claude then
 		// exits with "Settings file not found"). Pass the model via the
 		// ANTHROPIC_MODEL env var instead — claude reads that natively and
-		// happier passes the env through to the child.
+		// happier passes the env through to the child. Don't clobber an
+		// explicit ANTHROPIC_MODEL the caller set (used by LiteLLM routing).
 		if envOverrides == nil {
 			envOverrides = map[string]string{}
 		}
-		envOverrides["ANTHROPIC_MODEL"] = effectiveModel(model)
+		if _, set := envOverrides["ANTHROPIC_MODEL"]; !set {
+			envOverrides["ANTHROPIC_MODEL"] = effectiveModel(model)
+		}
 	} else {
 		// Fall back to launching claude directly with a persisted --session-id.
 		claudeUUID = generateUUID()

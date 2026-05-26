@@ -26,7 +26,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"task_brief":   stringProp("Optional task brief written to TASK.md in the working directory before the agent starts."),
 				"env_overrides": map[string]interface{}{
 					"type":        "object",
-					"description": "Optional environment variable overrides injected into the session. Omit to use the swarmops process environment (default Anthropic API). To route through AIP backends, always set both ANTHROPIC_BASE_URL=http://10.0.0.2:4000 and ANTHROPIC_API_KEY=sk-35439ddea8690f7c89be8497e2f43e318d4890123d288cca, then select the backend via the model field: omit model (or use a Claude ID) for GPT-5.4 [gpt], set model=or-deepseek-v4-pro for DeepSeek V4 Pro [dseek]. Session name is auto-prefixed accordingly. Keys and values must be strings.",
+					"description": "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
 					"additionalProperties": map[string]interface{}{"type": "string"},
 				},
 			}, nil),
@@ -55,13 +55,13 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			envOverrides := getStringMapArg(args, "env_overrides")
 
 			// Auto-prepend [gpt] or [dseek] prefix when routing to a non-Anthropic backend.
-			if _, hasBaseURL := envOverrides["ANTHROPIC_BASE_URL"]; hasBaseURL && name != "" && !strings.HasPrefix(name, "[") {
-				if strings.HasPrefix(model, "or-deepseek") {
-					name = "[dseek] " + name
-				} else {
-					name = "[gpt] " + name
-				}
+			// Pick the prefix from ANTHROPIC_MODEL first (the explicit signal), falling
+			// back to the legacy model arg for older callers.
+			prefixModel := envOverrides["ANTHROPIC_MODEL"]
+			if prefixModel == "" {
+				prefixModel = model
 			}
+			name = autoPrefixSessionName(name, prefixModel, envOverrides)
 
 			profile := getStringArg(args, "profile", "")
 			return svc.RunTask(ctx, name, directory, contextID, contextName, mission, model, profile, taskBrief, envOverrides)
@@ -89,7 +89,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"profile":       stringProp("Optional happier backend profile (e.g. 'deepseek', 'openai', 'gemini'). Defaults to 'anthropic'."),
 				"env_overrides": map[string]interface{}{
 					"type":        "object",
-					"description": "Optional environment variable overrides injected into the session. Omit to use the swarmops process environment (default Anthropic API). To route through AIP backends, always set both ANTHROPIC_BASE_URL=http://10.0.0.2:4000 and ANTHROPIC_API_KEY=sk-35439ddea8690f7c89be8497e2f43e318d4890123d288cca, then select the backend via the model field: omit model (or use a Claude ID) for GPT-5.4 [gpt], set model=or-deepseek-v4-pro for DeepSeek V4 Pro [dseek]. Session name is auto-prefixed accordingly. Keys and values must be strings.",
+					"description": "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
 					"additionalProperties": map[string]interface{}{"type": "string"},
 				},
 			}, []string{"repo_path"}),
@@ -139,13 +139,13 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			envOverrides := getStringMapArg(args, "env_overrides")
 
 			// Auto-prepend [gpt] or [dseek] prefix when routing to a non-Anthropic backend.
-			if _, hasBaseURL := envOverrides["ANTHROPIC_BASE_URL"]; hasBaseURL && name != "" && !strings.HasPrefix(name, "[") {
-				if strings.HasPrefix(model, "or-deepseek") {
-					name = "[dseek] " + name
-				} else {
-					name = "[gpt] " + name
-				}
+			// Pick the prefix from ANTHROPIC_MODEL first (the explicit signal), falling
+			// back to the legacy model arg for older callers.
+			prefixModel := envOverrides["ANTHROPIC_MODEL"]
+			if prefixModel == "" {
+				prefixModel = model
 			}
+			name = autoPrefixSessionName(name, prefixModel, envOverrides)
 
 			profile := getStringArg(args, "profile", "")
 			return svc.SpawnAgent(ctx, name, repoPath, worktreePath, branch, contextID, contextName, mission, model, profile, taskBrief, envOverrides)

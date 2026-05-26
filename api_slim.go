@@ -302,11 +302,13 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 
 		case http.MethodPost:
 			var req struct {
-				Name      string  `json:"name"`
-				Directory string  `json:"directory"`
-				ContextID *string `json:"context_id"`
-				Mission   *string `json:"mission"`
-				Model     string  `json:"model"`
+				Name         string            `json:"name"`
+				Directory    string            `json:"directory"`
+				ContextID    *string           `json:"context_id"`
+				Mission      *string           `json:"mission"`
+				Model        string            `json:"model"`
+				Profile      string            `json:"profile"`
+				EnvOverrides map[string]string `json:"env_overrides"`
 			}
 			json.NewDecoder(r.Body).Decode(&req)
 			if req.Name == "" {
@@ -316,7 +318,7 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 			if req.Directory == "" {
 				req.Directory = "."
 			}
-			s, err := spawnSession(ctx, req.Name, req.Directory, req.ContextID, nil, req.Mission, req.Model, "", nil, nil, nil, nil)
+			s, err := spawnSession(ctx, req.Name, req.Directory, req.ContextID, nil, req.Mission, req.Model, req.Profile, nil, nil, nil, req.EnvOverrides)
 			if err != nil {
 				http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
 				return

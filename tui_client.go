@@ -13,7 +13,7 @@ import (
 // swarmClient is the interface the TUI uses to talk to the SwarmOps backend.
 // The concrete implementation is apiClient (HTTP). Tests use fakeSwarmClient.
 type swarmClient interface {
-	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error)
+	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error)
 	listSessions() ([]Session, error)
 	deleteSession(id string) error
 	renameSession(id, name string) error
@@ -41,7 +41,7 @@ func newAPIClient(baseURL string) *apiClient {
 }
 
 // Spawn implements the Spawner interface via the HTTP API.
-func (c *apiClient) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error) {
+func (c *apiClient) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
 	body := map[string]interface{}{
 		"name":      name,
 		"directory": dir,
@@ -57,6 +57,9 @@ func (c *apiClient) Spawn(ctx context.Context, name, dir string, contextID, cont
 	}
 	if profile != "" {
 		body["profile"] = profile
+	}
+	if len(envOverrides) > 0 {
+		body["env_overrides"] = envOverrides
 	}
 
 	data, err := json.Marshal(body)

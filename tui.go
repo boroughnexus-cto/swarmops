@@ -146,14 +146,14 @@ const (
 
 // Spawner abstracts session creation for testability.
 type Spawner interface {
-	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error)
+	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error)
 }
 
 // defaultSpawner calls the real spawnSession function.
 type defaultSpawner struct{}
 
-func (defaultSpawner) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error) {
-	return spawnSession(ctx, name, dir, contextID, contextName, mission, model, profile, nil, nil, nil, nil)
+func (defaultSpawner) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
+	return spawnSession(ctx, name, dir, contextID, contextName, mission, model, profile, nil, nil, nil, envOverrides)
 }
 
 type tuiModel struct {
@@ -1619,7 +1619,9 @@ func (m *tuiModel) doSpawn(contextID, contextName *string) {
 	}
 	model := modelIDFromIndex(m.newModel)
 	profile := profileFromIndex(m.newModel)
-	s, err := m.spawner.Spawn(context.Background(), name, dir, contextID, contextName, mission, model, profile)
+	envOverrides := envOverridesFromIndex(m.newModel)
+	name = autoPrefixSessionName(name, model, envOverrides)
+	s, err := m.spawner.Spawn(context.Background(), name, dir, contextID, contextName, mission, model, profile, envOverrides)
 	if err != nil {
 		m.flash = "Spawn error: " + err.Error()
 	} else {
@@ -1640,7 +1642,7 @@ func (m *tuiModel) doDispatch(prompt string) {
 	} else {
 		// Spawn new session
 		name := sanitizeSessionName(m.actionTarget)
-		s, err := m.spawner.Spawn(context.Background(), name, os.Getenv("HOME"), nil, nil, nil, "", "")
+		s, err := m.spawner.Spawn(context.Background(), name, os.Getenv("HOME"), nil, nil, nil, "", "", nil)
 		if err != nil {
 			m.flash = "Spawn error: " + err.Error()
 		} else {
@@ -2411,14 +2413,19 @@ func animatedIndicator(activity string, frame int) string {
 }
 // backendOption describes one entry in the unified model+profile picker.
 type backendOption struct {
-	label   string // display name
-	model   string // claude model override (empty = default for profile)
-	profile string // happier backend profile (empty = anthropic)
+	label        string            // display name
+	model        string            // claude model override (empty = default for profile)
+	profile      string            // happier backend profile (empty = anthropic)
+	envOverrides map[string]string // extra env injected into the tmux session (e.g. LiteLLM routing)
 }
 
 // backendOptions is the ordered list of backend choices presented in the new-session
 // wizard (modeNewModel) and the per-session profile editor (modeEditProfile).
-// Indices: 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
+// Indices: 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai, 6=[gpt], 7=[dseek]
+//
+// The `[gpt]` and `[dseek]` entries route Claude Code through LiteLLM by
+// setting ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY+ANTHROPIC_MODEL via env, and
+// rely on autoPrefixSessionName to tag the resulting session name.
 var backendOptions = []backendOption{
 	{label: "default", model: "", profile: ""},
 	{label: "haiku", model: "claude-haiku-4-5-20251001", profile: ""},
@@ -2426,6 +2433,17 @@ var backendOptions = []backendOption{
 	{label: "opus", model: "claude-opus-4-6", profile: ""},
 	{label: "deepseek", model: "", profile: "deepseek"},
 	{label: "openai", model: "", profile: "openai"},
+	{label: "[gpt]", model: litellmModelGPT55, profile: "", envOverrides: litellmEnvOverrides(litellmModelGPT55)},
+	{label: "[dseek]", model: litellmModelDeepseek4, profile: "", envOverrides: litellmEnvOverrides(litellmModelDeepseek4)},
+}
+
+// envOverridesFromIndex returns the env override map for picker index idx,
+// or nil if the entry has no overrides.
+func envOverridesFromIndex(idx int) map[string]string {
+	if idx >= 0 && idx < len(backendOptions) {
+		return backendOptions[idx].envOverrides
+	}
+	return nil
 }
 
 // modelIDFromIndex returns the Claude model string for picker index idx.

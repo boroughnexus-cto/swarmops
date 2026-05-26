@@ -33,10 +33,12 @@ type spawnCall struct {
 	name, dir              string
 	contextID, contextName *string
 	mission                *string
+	model, profile         string
+	envOverrides           map[string]string
 }
 
-func (m *mockSpawner) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error) {
-	m.calls = append(m.calls, spawnCall{name, dir, contextID, contextName, mission})
+func (m *mockSpawner) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
+	m.calls = append(m.calls, spawnCall{name, dir, contextID, contextName, mission, model, profile, envOverrides})
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -1272,7 +1274,7 @@ type fakeSwarmClient struct {
 	Calls []string // e.g. "Spawn", "listSessions", "deleteSession:id"
 }
 
-func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model, profile string) (*Session, error) {
+func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
 	f.Calls = append(f.Calls, "Spawn")
 	if f.SpawnErr != nil {
 		return nil, f.SpawnErr
