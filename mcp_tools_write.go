@@ -607,6 +607,12 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				if err != nil {
 					return nil, fmt.Errorf("spawn session: %w", err)
 				}
+				// Inject `/goal <goal>` asynchronously after Claude has had a
+				// chance to start up and clear the workspace-trust prompt.
+				// The slash command sets a session-scoped Stop hook so claude
+				// can't end the conversation until the goal is met. TASK.md
+				// (written by RunTask) still gives the agent the brief.
+				go injectGoalAfterReady(sess.TmuxSession, goal)
 				result["status"] = "spawned"
 				result["matched"] = matched
 				result["session"] = sess

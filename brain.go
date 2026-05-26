@@ -4,9 +4,41 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
+	"time"
 )
+
+// injectGoalAfterReady waits for a freshly-spawned Claude Code session to
+// finish initialising (handle the workspace-trust prompt if it appears) and
+// then sends `/goal <goal>` so claude opens a session-scoped Stop hook keyed
+// to the goal text. Runs in its own goroutine so swop_newgoal returns
+// promptly; failures are best-effort and logged but not propagated to the
+// caller (the session itself is fine — TASK.md still carries the brief).
+func injectGoalAfterReady(tmuxSession, goal string) {
+	// Short initial wait — claude needs ~3-5s to render the trust prompt.
+	time.Sleep(6 * time.Second)
+	if !isTmuxAlive(tmuxSession) {
+		log.Printf("swop_newgoal: tmux %s gone before /goal inject", tmuxSession)
+		return
+	}
+	// If the workspace-trust prompt is up, accept the default (option 1 =
+	// Yes, I trust this folder) by sending Enter, then give claude time to
+	// initialise the session shell.
+	if out, err := captureTerminal(tmuxSession); err == nil {
+		if strings.Contains(out, "trust this folder") || strings.Contains(out, "Yes, I trust") {
+			_ = injectToSession(tmuxSession, "")
+			time.Sleep(5 * time.Second)
+		}
+	}
+	if !isTmuxAlive(tmuxSession) {
+		return
+	}
+	if err := injectToSession(tmuxSession, "/goal "+goal); err != nil {
+		log.Printf("swop_newgoal: /goal inject for %s: %v", tmuxSession, err)
+	}
+}
 
 // BrainPick is the structured decision returned by the swop_newgoal dispatcher.
 // `Pick` is either an "owner/name" slug from the known_repos catalogue or the
