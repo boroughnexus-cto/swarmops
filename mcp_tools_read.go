@@ -276,6 +276,37 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
+	// ─── rc_list_repos ──────────────────────────────────────────────────
+	reg.Register(
+		ToolDefinition{
+			Name:        "rc_list_repos",
+			Description: "[READ] List repos in the SwarmOps registry (both cloned locally and known via GitHub). Used by rc_newgoal to pick a session's working directory.",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"cloned_only": map[string]interface{}{
+					"type":        "boolean",
+					"description": "If true, return only repos that have a local clone (local_path set). Default false.",
+				},
+			}, nil),
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			clonedOnly := getBoolArg(args, "cloned_only", false)
+			repos, err := listKnownRepos(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if clonedOnly {
+				filtered := repos[:0]
+				for _, r := range repos {
+					if r.IsCloned() {
+						filtered = append(filtered, r)
+					}
+				}
+				repos = filtered
+			}
+			return map[string]interface{}{"repos": repos, "count": len(repos)}, nil
+		},
+	)
+
 	// ─── pool_status (gated) ────────────────────────────────────────────
 	// Registered conditionally by registerWriteTools if pool tools enabled.
 	// We handle it here to keep read tools together.

@@ -168,6 +168,7 @@ func applyMigrations(database *sql.DB) error {
 		"db/migrations/057_pool_cache_metrics.sql",
 		"db/migrations/058_session_worktree.sql",
 		"db/migrations/059_session_profile.sql",
+		"db/migrations/060_known_repos.sql",
 	}
 
 	for _, migrationPath := range migrations {

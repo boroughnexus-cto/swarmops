@@ -488,6 +488,133 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 		},
 	)
 
+	// ─── rc_repos_refresh ───────────────────────────────────────────────
+	reg.Register(
+		ToolDefinition{
+			Name:        "rc_repos_refresh",
+			Description: "[WRITE] Re-scan the local filesystem (under SWARMOPS_REPO_ROOTS, default ~/git-bnx) and GitHub (orgs in SWARMOPS_GITHUB_ORGS, default ThomkerNet+boroughnexus-cto) and upsert every discovered repo into the SwarmOps known_repos registry. Run after cloning a new repo or before invoking rc_newgoal on a fresh deploy.",
+			InputSchema: jsonSchema(map[string]interface{}{}, nil),
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			localCount, remoteCount, err := reposRefreshAll(ctx)
+			result := map[string]interface{}{
+				"local_upserts":  localCount,
+				"remote_upserts": remoteCount,
+			}
+			if err != nil {
+				result["error"] = err.Error()
+			}
+			return result, nil
+		},
+	)
+
+	// ─── rc_newgoal ─────────────────────────────────────────────────────
+	reg.Register(
+		ToolDefinition{
+			Name: "rc_newgoal",
+			Description: "[WRITE] Pick the right repo for a goal via the warm pool brain, then spawn a Claude Code session in that repo's working directory with the goal injected as the first prompt. Replaces 'manually choose directory + run rc_run_task' — eliminates context bloat from agents starting in the wrong tree. " +
+				"If no repo matches confidently, returns the brain's suggestion without spawning so the caller can decide whether to clone something new.",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"goal":        stringProp("The work to accomplish (1-3 sentences). The brain uses this to pick a repo and the spawned session sees it as the first user message."),
+				"brain_model": stringProp("Optional model the dispatcher uses for the routing decision. Defaults to 'haiku' (fast, cheap, sufficient for ~30-repo catalogues). Pass 'sonnet' for trickier picks, or any LiteLLM-routed id (e.g. 'chatgptsub-gpt-5.5', 'or-deepseek-v4-pro') for a third-party brain — note: third-party brains require a [gpt]/[dseek] worker in the pool; default brains use the pool's claude models."),
+				"dry_run":     map[string]interface{}{"type": "boolean", "description": "If true, return the brain's decision without spawning a session. Default false."},
+			}, []string{"goal"}),
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			goal := strings.TrimSpace(getStringArg(args, "goal", ""))
+			if goal == "" {
+				return nil, fmt.Errorf("goal is required")
+			}
+			brainModel := getStringArg(args, "brain_model", "")
+			if brainModel == "" {
+				brainModel = brainDefaultModel
+			}
+			dryRun := getBoolArg(args, "dry_run", false)
+
+			repos, err := listKnownRepos(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("load repo registry: %w", err)
+			}
+			if len(repos) == 0 {
+				return map[string]interface{}{
+					"status":  "no-repos",
+					"hint":    "registry is empty — run rc_repos_refresh first",
+					"goal":    goal,
+					"spawned": nil,
+				}, nil
+			}
+
+			raw, err := brainAsk(ctx, svc, brainModel, brainSystemPrompt, brainUserPrompt(goal, repos))
+			if err != nil {
+				return nil, fmt.Errorf("brain dispatch: %w", err)
+			}
+			pick, err := brainParse(raw)
+			if err != nil {
+				return nil, fmt.Errorf("parse brain reply: %w", err)
+			}
+
+			// Resolve the pick against the catalogue.
+			var matched *KnownRepo
+			if pick.Pick != "" && strings.ToLower(pick.Pick) != "none" {
+				for i := range repos {
+					if repos[i].Slug() == pick.Pick {
+						matched = &repos[i]
+						break
+					}
+				}
+			}
+
+			result := map[string]interface{}{
+				"goal":        goal,
+				"brain_model": brainModel,
+				"pick":        pick.Pick,
+				"confidence":  pick.Confidence,
+				"reasoning":   pick.Reasoning,
+				"suggestions": pick.Suggestions,
+			}
+
+			switch {
+			case matched == nil:
+				// No-match or unknown slug — return suggestion, do not spawn.
+				result["status"] = "no-match"
+				result["hint"] = "no repo confidently matches — consider creating a new one or refining the goal"
+				return result, nil
+
+			case !matched.IsCloned():
+				// Picked repo isn't cloned locally — surface the clone command.
+				result["status"] = "uncloned-pick"
+				result["matched"] = matched
+				result["clone_command"] = fmt.Sprintf(
+					"git clone https://github.com/%s/%s ~/git-bnx/%s",
+					matched.Owner, matched.Name, matched.Name,
+				)
+				result["hint"] = "picked repo isn't cloned — clone it then call rc_newgoal again"
+				return result, nil
+
+			case dryRun:
+				result["status"] = "dry-run"
+				result["matched"] = matched
+				return result, nil
+
+			default:
+				// Spawn a session in the picked repo, with the goal as the first message.
+				name := sanitizeSessionName(goal)
+				if name == "" {
+					name = "newgoal"
+				}
+				missionStr := goal
+				sess, err := svc.RunTask(ctx, name, matched.LocalPath, nil, nil, &missionStr, "", "", goal, nil)
+				if err != nil {
+					return nil, fmt.Errorf("spawn session: %w", err)
+				}
+				result["status"] = "spawned"
+				result["matched"] = matched
+				result["session"] = sess
+				return result, nil
+			}
+		},
+	)
+
 	// ─── Pool tools (gated behind SWARMOPS_MCP_POOL_TOOLS) ──────────────
 
 	if enablePoolTools {
