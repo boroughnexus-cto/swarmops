@@ -140,7 +140,15 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 		preSpawnIDs = listHappierSessionIDs()
 		sessionCmd = []string{"happier", "--yolo"}
 		sessionCmd = append(sessionCmd, profileToHappierArgs(profile)...)
-		sessionCmd = append(sessionCmd, "--model", effectiveModel(model))
+		// happier's `--model` flag triggers a bug where it deletes its hook
+		// settings file before the spawned claude can read it (claude then
+		// exits with "Settings file not found"). Pass the model via the
+		// ANTHROPIC_MODEL env var instead — claude reads that natively and
+		// happier passes the env through to the child.
+		if envOverrides == nil {
+			envOverrides = map[string]string{}
+		}
+		envOverrides["ANTHROPIC_MODEL"] = effectiveModel(model)
 	} else {
 		// Fall back to launching claude directly with a persisted --session-id.
 		claudeUUID = generateUUID()

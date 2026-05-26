@@ -2491,13 +2491,16 @@ func runTUI(api swarmClient) error {
 // Uses happier when available; falls back to claude otherwise.
 // For happier: non-UUID IDs are resumed via --existing-session; UUID IDs (pre-happier) start fresh.
 // For claude: UUID IDs are resumed via --resume; non-UUID IDs (happier-era) start fresh.
+//
+// For happier we set ANTHROPIC_MODEL via an `env` prefix instead of passing
+// `--model` directly — happier's `--model` flag triggers a bug where it
+// deletes its hook settings file before claude can read it.
 func resumeClaudeCmd(claudeID, model string) []string {
 	if happierAvailable() {
-		args := []string{"happier", "--yolo"}
+		args := []string{"env", "ANTHROPIC_MODEL=" + effectiveModel(model), "happier", "--yolo"}
 		if claudeID != "" && !isValidUUID(claudeID) {
 			args = append(args, "--existing-session", claudeID)
 		}
-		args = append(args, "--model", effectiveModel(model))
 		return args
 	}
 	// claude fallback
