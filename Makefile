@@ -1,4 +1,4 @@
-.PHONY: build clean dev run restart test test-race vet lint ci stop-port
+.PHONY: build clean dev run restart test test-race vet lint ci stop-port status logs fmt
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 
@@ -56,4 +56,29 @@ lint:
 		&& golangci-lint run ./... \
 		|| echo "golangci-lint not installed — skipping"
 
+fmt:
+	find . -name '*.go' ! -path './scratch/*' -print0 | xargs -0 gofmt -w
+
 ci: vet test-race
+
+status:
+	@echo "=== Service ==="
+	@if systemctl --user is-active swarmops 2>/dev/null; then \
+		systemctl --user status swarmops --no-pager -l; \
+	else \
+		echo "swarmops service not found or inactive"; \
+	fi
+	@echo ""
+	@echo "=== API health ==="
+	@raw=$$(curl -sf http://localhost:8080/api/dashboard/stats 2>/dev/null); \
+	if [ -z "$$raw" ]; then \
+		echo "(backend not responding on :8080)"; \
+	else \
+		echo "$$raw" | python3 -m json.tool 2>/dev/null || echo "(backend responded but returned invalid JSON: $$raw)"; \
+	fi
+	@echo ""
+	@echo "=== Active tmux sessions ==="
+	@tmux ls 2>/dev/null || echo "(no tmux sessions)"
+
+logs:
+	journalctl --user -u swarmops -n 100 --no-pager
