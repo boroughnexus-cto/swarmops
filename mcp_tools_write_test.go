@@ -5,23 +5,17 @@ import (
 	"testing"
 )
 
-// TestCreateSession_AllFields verifies that the full set of fields exposed by
-// the extended swop_run_task MCP tool (name, directory, context_id, context_name,
-// mission, model) round-trips correctly through createSession into the DB.
-//
-// This is the truth source for the MCP plumbing — swop_run_task is a thin
-// pass-through above this layer.
-func TestCreateSession_AllFields(t *testing.T) {
+// TestCreateSession_Basic verifies that createSession stores name, directory,
+// mission, model, and profile correctly and round-trips through getSession.
+func TestCreateSession_Basic(t *testing.T) {
 	defer setupTestDB(t)()
 	ctx := context.Background()
 
-	ctxID := "ctx-uuid-12345"
-	ctxName := "TKN Home Infra"
 	mission := "Investigate the Icinga alert"
 	model := "claude-sonnet-4-6"
 
 	sess, err := createSession(ctx, "my-named-session", "/tmp/work-dir",
-		&ctxID, &ctxName, &mission, false, model, "", nil, nil, nil)
+		&mission, false, model, "")
 	if err != nil {
 		t.Fatalf("createSession: %v", err)
 	}
@@ -32,12 +26,6 @@ func TestCreateSession_AllFields(t *testing.T) {
 	}
 	if sess.Directory != "/tmp/work-dir" {
 		t.Errorf("Directory = %q, want %q", sess.Directory, "/tmp/work-dir")
-	}
-	if sess.ContextID == nil || *sess.ContextID != ctxID {
-		t.Errorf("ContextID = %v, want %q", sess.ContextID, ctxID)
-	}
-	if sess.ContextName == nil || *sess.ContextName != ctxName {
-		t.Errorf("ContextName = %v, want %q", sess.ContextName, ctxName)
 	}
 	if sess.Mission == nil || *sess.Mission != mission {
 		t.Errorf("Mission = %v, want %q", sess.Mission, mission)
@@ -51,32 +39,25 @@ func TestCreateSession_AllFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getSession: %v", err)
 	}
-	if got.ContextID == nil || *got.ContextID != ctxID {
-		t.Errorf("persisted ContextID = %v, want %q", got.ContextID, ctxID)
+	if got.Name != "my-named-session" {
+		t.Errorf("persisted Name = %q, want %q", got.Name, "my-named-session")
 	}
-	if got.ContextName == nil || *got.ContextName != ctxName {
-		t.Errorf("persisted ContextName = %v, want %q", got.ContextName, ctxName)
+	if got.Mission == nil || *got.Mission != mission {
+		t.Errorf("persisted Mission = %v, want %q", got.Mission, mission)
 	}
 	if got.Model != model {
 		t.Errorf("persisted Model = %q, want %q", got.Model, model)
 	}
 }
 
-// TestCreateSession_NilOptionals verifies the original 3-field call path
-// (no context, no mission, no model) still works and stores nulls correctly.
-func TestCreateSession_NilOptionals(t *testing.T) {
+// TestCreateSession_NilMission verifies that nil mission works and stores nulls correctly.
+func TestCreateSession_NilMission(t *testing.T) {
 	defer setupTestDB(t)()
 	ctx := context.Background()
 
-	sess, err := createSession(ctx, "minimal", "/tmp", nil, nil, nil, false, "", "", nil, nil, nil)
+	sess, err := createSession(ctx, "minimal", "/tmp", nil, false, "", "")
 	if err != nil {
 		t.Fatalf("createSession: %v", err)
-	}
-	if sess.ContextID != nil {
-		t.Errorf("ContextID = %v, want nil", sess.ContextID)
-	}
-	if sess.ContextName != nil {
-		t.Errorf("ContextName = %v, want nil", sess.ContextName)
 	}
 	if sess.Mission != nil {
 		t.Errorf("Mission = %v, want nil", sess.Mission)
@@ -89,7 +70,7 @@ func TestCreateSession_NilOptionals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getSession: %v", err)
 	}
-	if got.ContextID != nil || got.ContextName != nil || got.Mission != nil {
-		t.Errorf("expected all nil, got ContextID=%v ContextName=%v Mission=%v", got.ContextID, got.ContextName, got.Mission)
+	if got.Mission != nil {
+		t.Errorf("persisted Mission = %v, want nil", got.Mission)
 	}
 }

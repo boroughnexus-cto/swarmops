@@ -868,14 +868,8 @@ func TestAction_SpawnNew(t *testing.T) {
 	m.actionTarget = "Fix auth middleware"
 	m.actionPrompt = "Work on Plane issue: Fix auth middleware"
 
-	// Enter → context picker (not immediate dispatch)
+	// Enter → immediate dispatch (no context picker step)
 	m = sendSpecialKey(m, "enter")
-	if m.mode != modeActionContext {
-		t.Fatalf("expected modeActionContext, got %d", m.mode)
-	}
-
-	// Esc → skip context, dispatch
-	m = sendSpecialKey(m, "esc")
 
 	if len(spawner.calls) != 1 {
 		t.Fatalf("expected 1 spawn call, got %d", len(spawner.calls))
