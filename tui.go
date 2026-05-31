@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -195,6 +196,9 @@ type tuiModel struct {
 
 	// Terminal size
 	w, h int
+
+	// mu protects w and h from concurrent write (resize) vs read (Update)
+	mu sync.Mutex
 
 	// Status message
 	flash string
@@ -535,6 +539,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
+		m.mu.Lock()
 		m.w = msg.Width
 		m.h = msg.Height
 		contentWidth := m.w - 26
@@ -552,6 +557,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vp.MouseWheelEnabled = true
 		m.vpReady = true
 		m.updateContentCache()
+		m.mu.Unlock()
 		return m, nil
 
 	case tickMsg:
