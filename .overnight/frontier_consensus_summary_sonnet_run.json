@@ -1,0 +1,21 @@
+{
+  "n_items": 44,
+  "n_processed_this_run": 44,
+  "n_consensus_gold": 0,
+  "n_majority_gold": 0,
+  "matrix_counts": {
+    "audit=PASS__frontier=silver": 21,
+    "audit=PASS__frontier=unparsed": 32,
+    "audit=FAIL__frontier=reject": 19,
+    "audit=FAIL__frontier=empty": 2,
+    "audit=PASS__frontier=reject": 32,
+    "audit=PASS__frontier=empty": 5,
+    "audit=PASS__frontier=gold": 6,
+    "audit=FAIL__frontier=silver": 4,
+    "audit=FAIL__frontier=unparsed": 8,
+    "audit=MID__frontier=reject": 1,
+    "audit=MID__frontier=gold": 1,
+    "audit=MID__frontier=unparsed": 1
+  },
+  "generated_at": "2026-05-22T20:47:01"
+}

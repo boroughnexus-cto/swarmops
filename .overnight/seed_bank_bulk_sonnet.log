@@ -1,0 +1,52 @@
+[07:19:08] === bulk seed generation starting (target=60000, workers=4, batch=5) ===
+[07:19:08] existing accepted seeds: 0 | {}
+[07:19:08] prepared 12000 batches across categories
+[07:31:49]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:31:49]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:31:49]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:31:49]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:44:08]   +5 [partial_knowledge] (succeeded on retry #2)
+[07:44:08]   +5 [partial_knowledge] ; total=5 ; rate=0/min ; 1/12000 batches
+[07:44:29]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:44:29]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:44:29]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:55:56]   +5 [partial_knowledge] (succeeded on retry #2)
+[07:55:56]   +5 [partial_knowledge] ; total=10 ; rate=0/min ; 2/12000 batches
+[07:57:09]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:57:09]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:57:09]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:08:36]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:09:19]   +5 [partial_knowledge] (succeeded on retry #2)
+[08:09:19]   +5 [partial_knowledge] ; total=15 ; rate=0/min ; 3/12000 batches
+[08:09:46]   +5 [partial_knowledge] (succeeded on retry #2)
+[08:09:46]   +5 [partial_knowledge] ; total=20 ; rate=0/min ; 4/12000 batches
+[08:09:49]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:17:39]   +5 [partial_knowledge] (succeeded on retry #1)
+[08:17:39]   +5 [partial_knowledge] ; total=25 ; rate=0/min ; 5/12000 batches
+[08:21:16]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:21:59]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:22:30]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:30:20]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:33:56]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:34:40]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:35:10]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:43:00]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:46:36]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:47:20]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:47:50]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:50:16]   +5 [partial_knowledge] ; total=30 ; rate=0/min ; 6/12000 batches
+[08:51:19]   +5 [partial_knowledge] (succeeded on retry #1)
+[08:51:19]   +5 [partial_knowledge] ; total=35 ; rate=0/min ; 7/12000 batches
+[08:59:16]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:00:00]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:02:56]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:03:15]   +5 [partial_knowledge] ; total=40 ; rate=0/min ; 8/12000 batches
+[09:04:00]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:12:40]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:15:37]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:15:55]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:16:40]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:20:39]   +5 [partial_knowledge] ; total=45 ; rate=0/min ; 9/12000 batches
+[09:25:20]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:28:17]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:28:35]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry

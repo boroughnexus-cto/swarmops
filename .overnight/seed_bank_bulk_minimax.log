@@ -1,0 +1,539 @@
+[22:17:17] === bulk seed generation starting (target=10000, workers=2, batch=5) ===
+[22:17:17] existing accepted seeds: 0 | {}
+[22:17:17] prepared 2000 batches across categories
+[22:18:01]   +5 [partial_knowledge] ; total=5 ; rate=7/min ; 1/2000 batches
+[22:18:14]   +5 [partial_knowledge] ; total=10 ; rate=11/min ; 2/2000 batches
+[22:19:25]   +5 [partial_knowledge] (succeeded on retry #1)
+[22:19:25]   +5 [partial_knowledge] ; total=15 ; rate=7/min ; 3/2000 batches
+[22:19:58]   +2 [partial_knowledge] ; total=17 ; rate=6/min ; 4/2000 batches
+[22:21:15]   +5 [partial_knowledge] (succeeded on retry #1)
+[22:21:15]   +5 [partial_knowledge] ; total=22 ; rate=6/min ; 5/2000 batches
+[22:22:26]   +1 [partial_knowledge] ; total=23 ; rate=4/min ; 6/2000 batches
+[22:22:38]   +5 [partial_knowledge] ; total=28 ; rate=5/min ; 7/2000 batches
+[22:24:24]   +5 [partial_knowledge] (succeeded on retry #1)
+[22:24:24]   +5 [partial_knowledge] ; total=33 ; rate=5/min ; 8/2000 batches
+[22:26:16]   +5 [partial_knowledge] (succeeded on retry #1)
+[22:26:16]   +5 [partial_knowledge] ; total=38 ; rate=4/min ; 9/2000 batches
+[22:26:37]   +5 [partial_knowledge] (succeeded on retry #2)
+[22:26:37]   +5 [partial_knowledge] ; total=43 ; rate=5/min ; 10/2000 batches
+[22:27:29]   +5 [partial_knowledge] ; total=48 ; rate=5/min ; 11/2000 batches
+[22:27:39]   +2 [partial_knowledge] ; total=50 ; rate=5/min ; 12/2000 batches
+[22:28:53]   +3 [partial_knowledge] ; total=53 ; rate=5/min ; 13/2000 batches
+[22:29:34]   +3 [partial_knowledge] (succeeded on retry #1)
+[22:29:34]   +3 [partial_knowledge] ; total=56 ; rate=5/min ; 14/2000 batches
+[22:32:17]   +4 [partial_knowledge] (succeeded on retry #1)
+[22:32:17]   +4 [partial_knowledge] ; total=60 ; rate=4/min ; 15/2000 batches
+[22:33:39]   +1 [partial_knowledge] ; total=61 ; rate=4/min ; 16/2000 batches
+[22:34:43]   +5 [partial_knowledge] (succeeded on retry #2)
+[22:34:43]   +5 [partial_knowledge] ; total=66 ; rate=4/min ; 17/2000 batches
+[22:41:13]   +5 [partial_knowledge] (succeeded on retry #2)
+[22:41:13]   +5 [partial_knowledge] ; total=71 ; rate=3/min ; 18/2000 batches
+[22:42:17]   +1 [partial_knowledge] (succeeded on retry #2)
+[22:42:17]   +1 [partial_knowledge] ; total=72 ; rate=3/min ; 19/2000 batches
+[22:42:26]   +6 [partial_knowledge] ; total=78 ; rate=3/min ; 20/2000 batches
+[22:42:39]   +5 [partial_knowledge] ; total=83 ; rate=3/min ; 21/2000 batches
+[22:43:34]   +3 [partial_knowledge] ; total=86 ; rate=3/min ; 22/2000 batches
+[22:44:53]   +1 [partial_knowledge] ; total=87 ; rate=3/min ; 23/2000 batches
+[22:48:43]   +5 [partial_knowledge] (succeeded on retry #1)
+[22:48:44]   +5 [partial_knowledge] ; total=92 ; rate=3/min ; 24/2000 batches
+[22:50:57]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[22:52:19] === bulk seed generation starting (target=30000, workers=2, batch=5) ===
+[22:52:19] existing accepted seeds: 92 | {'partial_knowledge': 92}
+[22:52:19] prepared 5982 batches across categories
+[22:52:33]   +5 [partial_knowledge] ; total=5 ; rate=21/min ; 1/5982 batches
+[22:57:53]   +5 [partial_knowledge] (succeeded on retry #2)
+[22:57:53]   +5 [partial_knowledge] ; total=10 ; rate=2/min ; 2/5982 batches
+[22:58:32]   +7 [partial_knowledge] (succeeded on retry #2)
+[22:58:32]   +7 [partial_knowledge] ; total=17 ; rate=3/min ; 3/5982 batches
+[23:03:35]   +5 [partial_knowledge] (succeeded on retry #1)
+[23:03:35]   +5 [partial_knowledge] ; total=22 ; rate=2/min ; 4/5982 batches
+[23:05:01]   +5 [partial_knowledge] ; total=27 ; rate=2/min ; 5/5982 batches
+[23:06:15]   +1 [partial_knowledge] ; total=28 ; rate=2/min ; 6/5982 batches
+[23:06:40]   +5 [partial_knowledge] ; total=33 ; rate=2/min ; 7/5982 batches
+[23:07:41]   +1 [partial_knowledge] (succeeded on retry #2)
+[23:07:41]   +1 [partial_knowledge] ; total=34 ; rate=2/min ; 8/5982 batches
+[23:10:46]   +5 [partial_knowledge] (succeeded on retry #1)
+[23:10:46]   +5 [partial_knowledge] ; total=39 ; rate=2/min ; 9/5982 batches
+[23:11:51]   +5 [partial_knowledge] (succeeded on retry #1)
+[23:11:51]   +5 [partial_knowledge] ; total=44 ; rate=2/min ; 10/5982 batches
+[23:12:19]   +5 [partial_knowledge] ; total=49 ; rate=2/min ; 11/5982 batches
+[23:12:35]   +5 [partial_knowledge] ; total=54 ; rate=3/min ; 12/5982 batches
+[23:15:38]   +3 [partial_knowledge] (succeeded on retry #1)
+[23:15:38]   +3 [partial_knowledge] ; total=57 ; rate=2/min ; 13/5982 batches
+[23:16:25]   +1 [partial_knowledge] (succeeded on retry #1)
+[23:16:25]   +1 [partial_knowledge] ; total=58 ; rate=2/min ; 14/5982 batches
+[23:18:11]   +5 [partial_knowledge] ; total=63 ; rate=2/min ; 15/5982 batches
+[23:19:33]   +3 [partial_knowledge] ; total=66 ; rate=2/min ; 16/5982 batches
+[23:19:50]   +5 [partial_knowledge] ; total=71 ; rate=3/min ; 17/5982 batches
+[23:22:48]   +1 [partial_knowledge] (succeeded on retry #2)
+[23:22:48]   +1 [partial_knowledge] ; total=72 ; rate=2/min ; 18/5982 batches
+[23:26:23]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[23:26:39]   +5 [partial_knowledge] (succeeded on retry #1)
+[23:26:39]   +5 [partial_knowledge] ; total=77 ; rate=2/min ; 19/5982 batches
+[23:28:03]   +3 [partial_knowledge] ; total=80 ; rate=2/min ; 20/5982 batches
+[23:31:14]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[23:33:24]   +5 [partial_knowledge] (succeeded on retry #1)
+[23:33:24]   +5 [partial_knowledge] ; total=85 ; rate=2/min ; 21/5982 batches
+[23:34:01]   +5 [partial_knowledge] ; total=90 ; rate=2/min ; 22/5982 batches
+[23:34:30]   +5 [partial_knowledge] ; total=95 ; rate=2/min ; 23/5982 batches
+[23:34:51]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[23:35:36]   +5 [partial_knowledge] ; total=100 ; rate=2/min ; 24/5982 batches
+[23:35:43]   +8 [partial_knowledge] ; total=108 ; rate=2/min ; 25/5982 batches
+[23:35:46]   +5 [partial_knowledge] ; total=113 ; rate=3/min ; 26/5982 batches
+[23:36:35]   +5 [partial_knowledge] ; total=118 ; rate=3/min ; 27/5982 batches
+[23:36:50]   +5 [partial_knowledge] ; total=123 ; rate=3/min ; 28/5982 batches
+[23:37:31]   +5 [partial_knowledge] ; total=128 ; rate=3/min ; 29/5982 batches
+[23:45:27]   +4 [partial_knowledge] (succeeded on retry #2)
+[23:45:27]   +4 [partial_knowledge] ; total=132 ; rate=2/min ; 30/5982 batches
+[23:45:54]   +5 [partial_knowledge] ; total=137 ; rate=3/min ; 31/5982 batches
+[23:45:55]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[23:51:23]   +2 [partial_knowledge] (succeeded on retry #1)
+[23:51:23]   +2 [partial_knowledge] ; total=139 ; rate=2/min ; 32/5982 batches
+[23:51:40]   +5 [partial_knowledge] ; total=144 ; rate=2/min ; 33/5982 batches
+[23:52:11]   +5 [partial_knowledge] ; total=149 ; rate=2/min ; 34/5982 batches
+[23:54:53]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[23:55:59]   +1 [partial_knowledge] (succeeded on retry #1)
+[23:55:59]   +1 [partial_knowledge] ; total=150 ; rate=2/min ; 35/5982 batches
+[23:59:39]   +2 [partial_knowledge] (succeeded on retry #1)
+[23:59:39]   +2 [partial_knowledge] ; total=152 ; rate=2/min ; 36/5982 batches
+[23:59:39]   +5 [partial_knowledge] (succeeded on retry #1)
+[23:59:39]   +5 [partial_knowledge] ; total=157 ; rate=2/min ; 37/5982 batches
+[00:01:01]   +5 [partial_knowledge] ; total=162 ; rate=2/min ; 38/5982 batches
+[00:02:39]   +2 [partial_knowledge] ; total=164 ; rate=2/min ; 39/5982 batches
+[00:02:44]   +5 [partial_knowledge] (succeeded on retry #2)
+[00:02:44]   +5 [partial_knowledge] ; total=169 ; rate=2/min ; 40/5982 batches
+[00:08:16]   +1 [partial_knowledge] (succeeded on retry #1)
+[00:08:16]   +1 [partial_knowledge] ; total=170 ; rate=2/min ; 41/5982 batches
+[00:08:53]   +5 [partial_knowledge] ; total=175 ; rate=2/min ; 42/5982 batches
+[00:09:03]   +5 [partial_knowledge] (succeeded on retry #1)
+[00:09:03]   +5 [partial_knowledge] ; total=180 ; rate=2/min ; 43/5982 batches
+[00:09:31]   +5 [partial_knowledge] ; total=185 ; rate=2/min ; 44/5982 batches
+[00:09:57]   +5 [partial_knowledge] ; total=190 ; rate=2/min ; 45/5982 batches
+[00:14:38]   +5 [partial_knowledge] (succeeded on retry #2)
+[00:14:38]   +5 [partial_knowledge] ; total=195 ; rate=2/min ; 46/5982 batches
+[00:14:49]   +5 [partial_knowledge] (succeeded on retry #2)
+[00:14:49]   +5 [partial_knowledge] ; total=200 ; rate=2/min ; 47/5982 batches
+[00:15:32]   +5 [partial_knowledge] ; total=205 ; rate=2/min ; 48/5982 batches
+[00:15:46]   +5 [partial_knowledge] ; total=210 ; rate=3/min ; 49/5982 batches
+[00:15:59]   +1 [partial_knowledge] ; total=211 ; rate=3/min ; 50/5982 batches
+[00:16:53]   +5 [partial_knowledge] ; total=216 ; rate=3/min ; 51/5982 batches
+[00:20:39]   +5 [partial_knowledge] (succeeded on retry #1)
+[00:20:39]   +5 [partial_knowledge] ; total=221 ; rate=3/min ; 52/5982 batches
+[00:20:43]   +2 [partial_knowledge] (succeeded on retry #1)
+[00:20:43]   +2 [partial_knowledge] ; total=223 ; rate=3/min ; 53/5982 batches
+[00:24:25]   +5 [partial_knowledge] (succeeded on retry #1)
+[00:24:25]   +5 [partial_knowledge] ; total=228 ; rate=2/min ; 54/5982 batches
+[00:24:48]   +4 [partial_knowledge] (succeeded on retry #1)
+[00:24:48]   +4 [partial_knowledge] ; total=232 ; rate=3/min ; 55/5982 batches
+[00:25:32]   +5 [partial_knowledge] ; total=237 ; rate=3/min ; 56/5982 batches
+[00:25:54]   +1 [partial_knowledge] ; total=238 ; rate=3/min ; 57/5982 batches
+[00:26:55]   +2 [partial_knowledge] ; total=240 ; rate=3/min ; 58/5982 batches
+[00:30:20]   +5 [partial_knowledge] (succeeded on retry #1)
+[00:30:20]   +5 [partial_knowledge] ; total=245 ; rate=2/min ; 59/5982 batches
+[00:31:03]   +1 [partial_knowledge] (succeeded on retry #1)
+[00:31:03]   +1 [partial_knowledge] ; total=246 ; rate=2/min ; 60/5982 batches
+[00:32:03]   +1 [partial_knowledge] ; total=247 ; rate=2/min ; 61/5982 batches
+[00:32:17]   +1 [partial_knowledge] ; total=248 ; rate=2/min ; 62/5982 batches
+[00:33:49]   +1 [partial_knowledge] ; total=249 ; rate=2/min ; 63/5982 batches
+[00:40:14]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[00:40:53]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[00:41:28]   +1 [partial_knowledge] ; total=250 ; rate=2/min ; 64/5982 batches
+[00:42:12]   +5 [partial_knowledge] ; total=255 ; rate=2/min ; 65/5982 batches
+[00:43:38]   +6 [partial_knowledge] ; total=261 ; rate=2/min ; 66/5982 batches
+[00:46:23]   +1 [partial_knowledge] (succeeded on retry #1)
+[00:46:23]   +1 [partial_knowledge] ; total=262 ; rate=2/min ; 67/5982 batches
+[00:47:43]   +1 [partial_knowledge] ; total=263 ; rate=2/min ; 68/5982 batches
+[00:47:51]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[00:48:48]   +4 [partial_knowledge] ; total=267 ; rate=2/min ; 69/5982 batches
+[00:49:16]   +5 [partial_knowledge] ; total=272 ; rate=2/min ; 70/5982 batches
+[00:50:37]   +1 [partial_knowledge] (succeeded on retry #1)
+[00:50:37]   +1 [partial_knowledge] ; total=273 ; rate=2/min ; 71/5982 batches
+[00:50:48]   +5 [partial_knowledge] ; total=278 ; rate=2/min ; 72/5982 batches
+[00:53:38]   +5 [partial_knowledge] ; total=283 ; rate=2/min ; 73/5982 batches
+[00:54:37]   +1 [partial_knowledge] ; total=284 ; rate=2/min ; 74/5982 batches
+[00:55:53]   +1 [partial_knowledge] ; total=285 ; rate=2/min ; 75/5982 batches
+[00:58:46]   +5 [partial_knowledge] ; total=290 ; rate=2/min ; 76/5982 batches
+[00:58:52]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[00:59:01]   +5 [partial_knowledge] ; total=295 ; rate=2/min ; 77/5982 batches
+[01:05:39]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[01:06:37]   +5 [partial_knowledge] (succeeded on retry #1)
+[01:06:37]   +5 [partial_knowledge] ; total=300 ; rate=2/min ; 78/5982 batches
+[01:09:23]   +1 [partial_knowledge] (succeeded on retry #2)
+[01:09:23]   +1 [partial_knowledge] ; total=301 ; rate=2/min ; 79/5982 batches
+[01:10:21]   +1 [partial_knowledge] (succeeded on retry #2)
+[01:10:21]   +1 [partial_knowledge] ; total=302 ; rate=2/min ; 80/5982 batches
+[01:12:20]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[01:12:25]   +1 [partial_knowledge] ; total=303 ; rate=2/min ; 81/5982 batches
+[01:12:46]   +5 [partial_knowledge] ; total=308 ; rate=2/min ; 82/5982 batches
+[01:15:01]   +7 [partial_knowledge] (succeeded on retry #1)
+[01:15:01]   +7 [partial_knowledge] ; total=315 ; rate=2/min ; 83/5982 batches
+[01:15:36]   +1 [partial_knowledge] (succeeded on retry #1)
+[01:15:36]   +1 [partial_knowledge] ; total=316 ; rate=2/min ; 84/5982 batches
+[01:16:49]   +8 [partial_knowledge] ; total=324 ; rate=2/min ; 85/5982 batches
+[01:16:56]   +5 [partial_knowledge] (succeeded on retry #1)
+[01:16:56]   +5 [partial_knowledge] ; total=329 ; rate=2/min ; 86/5982 batches
+[01:18:22]   +5 [partial_knowledge] ; total=334 ; rate=2/min ; 87/5982 batches
+[01:20:16]   +1 [partial_knowledge] ; total=335 ; rate=2/min ; 88/5982 batches
+[01:22:32]   +5 [partial_knowledge] (succeeded on retry #1)
+[01:22:32]   +5 [partial_knowledge] ; total=340 ; rate=2/min ; 89/5982 batches
+[01:23:55]   +1 [partial_knowledge] ; total=341 ; rate=2/min ; 90/5982 batches
+[01:25:39]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[01:32:01]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[01:32:15]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[01:32:46]   +4 [partial_knowledge] ; total=345 ; rate=2/min ; 91/5982 batches
+[01:33:09]   +5 [partial_knowledge] ; total=350 ; rate=2/min ; 92/5982 batches
+[01:34:55]   +5 [partial_knowledge] ; total=355 ; rate=2/min ; 93/5982 batches
+[01:37:44]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[01:38:53]   +5 [partial_knowledge] (succeeded on retry #1)
+[01:38:53]   +5 [partial_knowledge] ; total=360 ; rate=2/min ; 94/5982 batches
+[01:39:25]   +5 [partial_knowledge] ; total=365 ; rate=2/min ; 95/5982 batches
+[01:39:43]   +5 [partial_knowledge] ; total=370 ; rate=2/min ; 96/5982 batches
+[01:41:38]   +1 [partial_knowledge] ; total=371 ; rate=2/min ; 97/5982 batches
+[01:42:02]   +5 [partial_knowledge] ; total=376 ; rate=2/min ; 98/5982 batches
+[01:42:36]   +5 [partial_knowledge] ; total=381 ; rate=2/min ; 99/5982 batches
+[01:43:14]   +5 [partial_knowledge] ; total=386 ; rate=2/min ; 100/5982 batches
+[01:45:20]   +5 [partial_knowledge] (succeeded on retry #1)
+[01:45:20]   +5 [partial_knowledge] ; total=391 ; rate=2/min ; 101/5982 batches
+[01:45:38]   +5 [partial_knowledge] ; total=396 ; rate=2/min ; 102/5982 batches
+[01:48:32]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[01:49:04]   +5 [partial_knowledge] ; total=401 ; rate=2/min ; 103/5982 batches
+[01:49:24]   +5 [partial_knowledge] ; total=406 ; rate=2/min ; 104/5982 batches
+[01:49:45]   +5 [partial_knowledge] (succeeded on retry #1)
+[01:49:45]   +5 [partial_knowledge] ; total=411 ; rate=2/min ; 105/5982 batches
+[01:50:16]   +5 [partial_knowledge] ; total=416 ; rate=2/min ; 106/5982 batches
+[01:50:42]   +4 [partial_knowledge] ; total=420 ; rate=2/min ; 107/5982 batches
+[01:51:13]   +5 [partial_knowledge] (succeeded on retry #1)
+[01:51:13]   +5 [partial_knowledge] ; total=425 ; rate=2/min ; 108/5982 batches
+[01:53:08]   +1 [partial_knowledge] ; total=426 ; rate=2/min ; 109/5982 batches
+[01:54:24]   +5 [partial_knowledge] (succeeded on retry #1)
+[01:54:24]   +5 [partial_knowledge] ; total=431 ; rate=2/min ; 110/5982 batches
+[01:55:52]   +7 [partial_knowledge] ; total=438 ; rate=2/min ; 111/5982 batches
+[02:00:24]   +5 [partial_knowledge] (succeeded on retry #1)
+[02:00:24]   +5 [partial_knowledge] ; total=443 ; rate=2/min ; 112/5982 batches
+[02:02:50]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[02:03:00]   +5 [partial_knowledge] ; total=448 ; rate=2/min ; 113/5982 batches
+[02:03:46]   +5 [partial_knowledge] ; total=453 ; rate=2/min ; 114/5982 batches
+[02:04:40]   +5 [partial_knowledge] ; total=458 ; rate=2/min ; 115/5982 batches
+[02:06:27]   +5 [partial_knowledge] ; total=463 ; rate=2/min ; 116/5982 batches
+[02:07:20]   +5 [partial_knowledge] ; total=468 ; rate=2/min ; 117/5982 batches
+[02:07:44]   +5 [partial_knowledge] ; total=473 ; rate=2/min ; 118/5982 batches
+[02:11:28]   +3 [partial_knowledge] (succeeded on retry #1)
+[02:11:28]   +3 [partial_knowledge] ; total=476 ; rate=2/min ; 119/5982 batches
+[02:17:25]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[02:17:54]   +5 [partial_knowledge] ; total=481 ; rate=2/min ; 120/5982 batches
+[02:20:19]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[02:21:48]   +9 [partial_knowledge] ; total=490 ; rate=2/min ; 121/5982 batches
+[02:22:21]   +5 [partial_knowledge] (succeeded on retry #1)
+[02:22:21]   +5 [partial_knowledge] ; total=495 ; rate=2/min ; 122/5982 batches
+[02:22:37]   +5 [partial_knowledge] ; total=500 ; rate=2/min ; 123/5982 batches
+[02:25:05]   +1 [partial_knowledge] ; total=501 ; rate=2/min ; 124/5982 batches
+[02:25:32]   +5 [partial_knowledge] ; total=506 ; rate=2/min ; 125/5982 batches
+[02:32:51]   +5 [partial_knowledge] (succeeded on retry #2)
+[02:32:51]   +5 [partial_knowledge] ; total=511 ; rate=2/min ; 126/5982 batches
+[02:33:31]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[02:36:30]   +3 [partial_knowledge] ; total=514 ; rate=2/min ; 127/5982 batches
+[02:37:09]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[02:37:59]   +3 [partial_knowledge] ; total=517 ; rate=2/min ; 128/5982 batches
+[02:38:23]   +1 [partial_knowledge] ; total=518 ; rate=2/min ; 129/5982 batches
+[02:39:20]   +5 [partial_knowledge] ; total=523 ; rate=2/min ; 130/5982 batches
+[02:39:36]   +5 [partial_knowledge] ; total=528 ; rate=2/min ; 131/5982 batches
+[02:39:46]   +5 [partial_knowledge] ; total=533 ; rate=2/min ; 132/5982 batches
+[02:41:59]   +5 [partial_knowledge] (succeeded on retry #1)
+[02:41:59]   +5 [partial_knowledge] ; total=538 ; rate=2/min ; 133/5982 batches
+[02:44:11]   +5 [partial_knowledge] (succeeded on retry #1)
+[02:44:11]   +5 [partial_knowledge] ; total=543 ; rate=2/min ; 134/5982 batches
+[02:46:13]   +2 [partial_knowledge] ; total=545 ; rate=2/min ; 135/5982 batches
+[02:48:26]   +6 [partial_knowledge] ; total=551 ; rate=2/min ; 136/5982 batches
+[02:48:33]   +5 [partial_knowledge] (succeeded on retry #2)
+[02:48:33]   +5 [partial_knowledge] ; total=556 ; rate=2/min ; 137/5982 batches
+[02:48:41]   +5 [partial_knowledge] ; total=561 ; rate=2/min ; 138/5982 batches
+[02:50:13]   +9 [partial_knowledge] ; total=570 ; rate=2/min ; 139/5982 batches
+[02:50:41]   +5 [partial_knowledge] ; total=575 ; rate=2/min ; 140/5982 batches
+[02:50:44]   +5 [partial_knowledge] (succeeded on retry #1)
+[02:50:44]   +5 [partial_knowledge] ; total=580 ; rate=2/min ; 141/5982 batches
+[02:53:39]   +1 [partial_knowledge] (succeeded on retry #1)
+[02:53:39]   +1 [partial_knowledge] ; total=581 ; rate=2/min ; 142/5982 batches
+[02:55:13]   +5 [partial_knowledge] (succeeded on retry #1)
+[02:55:13]   +5 [partial_knowledge] ; total=586 ; rate=2/min ; 143/5982 batches
+[02:57:48]   +4 [partial_knowledge] (succeeded on retry #1)
+[02:57:48]   +4 [partial_knowledge] ; total=590 ; rate=2/min ; 144/5982 batches
+[02:58:23]   +5 [partial_knowledge] (succeeded on retry #2)
+[02:58:23]   +5 [partial_knowledge] ; total=595 ; rate=2/min ; 145/5982 batches
+[02:58:37]   +5 [partial_knowledge] ; total=600 ; rate=2/min ; 146/5982 batches
+[03:00:10]   +5 [partial_knowledge] ; total=605 ; rate=2/min ; 147/5982 batches
+[03:00:26]   +5 [partial_knowledge] (succeeded on retry #1)
+[03:00:26]   +5 [partial_knowledge] ; total=610 ; rate=2/min ; 148/5982 batches
+[03:08:06]   +1 [partial_knowledge] (succeeded on retry #1)
+[03:08:06]   +1 [partial_knowledge] ; total=611 ; rate=2/min ; 149/5982 batches
+[03:09:29]   +4 [partial_knowledge] (succeeded on retry #2)
+[03:09:29]   +4 [partial_knowledge] ; total=615 ; rate=2/min ; 150/5982 batches
+[03:12:00]   +1 [partial_knowledge] ; total=616 ; rate=2/min ; 151/5982 batches
+[03:14:18]   +5 [partial_knowledge] (succeeded on retry #1)
+[03:14:18]   +5 [partial_knowledge] ; total=621 ; rate=2/min ; 152/5982 batches
+[03:14:33]   +5 [partial_knowledge] ; total=626 ; rate=2/min ; 153/5982 batches
+[03:14:50]   +5 [partial_knowledge] ; total=631 ; rate=2/min ; 154/5982 batches
+[03:15:39]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[03:16:42]   +5 [partial_knowledge] ; total=636 ; rate=2/min ; 155/5982 batches
+[03:23:08]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[03:23:31]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[03:24:37]   +5 [partial_knowledge] ; total=641 ; rate=2/min ; 156/5982 batches
+[03:25:05]   +9 [partial_knowledge] ; total=650 ; rate=2/min ; 157/5982 batches
+[03:25:28]   +5 [partial_knowledge] ; total=655 ; rate=2/min ; 158/5982 batches
+[03:27:02]   +2 [partial_knowledge] ; total=657 ; rate=2/min ; 159/5982 batches
+[03:27:08]   +10 [partial_knowledge] ; total=667 ; rate=2/min ; 160/5982 batches
+[03:28:38]   +9 [partial_knowledge] ; total=676 ; rate=2/min ; 161/5982 batches
+[03:28:45]   +5 [partial_knowledge] ; total=681 ; rate=2/min ; 162/5982 batches
+[03:29:01]   +5 [partial_knowledge] ; total=686 ; rate=2/min ; 163/5982 batches
+[03:30:04]   +5 [partial_knowledge] ; total=691 ; rate=2/min ; 164/5982 batches
+[03:34:44]   +5 [partial_knowledge] (succeeded on retry #2)
+[03:34:44]   +5 [partial_knowledge] ; total=696 ; rate=2/min ; 165/5982 batches
+[03:36:22]   +5 [partial_knowledge] (succeeded on retry #1)
+[03:36:22]   +5 [partial_knowledge] ; total=701 ; rate=2/min ; 166/5982 batches
+[03:36:35]   +5 [partial_knowledge] ; total=706 ; rate=2/min ; 167/5982 batches
+[03:37:59]   +1 [partial_knowledge] (succeeded on retry #1)
+[03:37:59]   +1 [partial_knowledge] ; total=707 ; rate=2/min ; 168/5982 batches
+[03:38:19]   +5 [partial_knowledge] ; total=712 ; rate=2/min ; 169/5982 batches
+[03:38:42]   +5 [partial_knowledge] ; total=717 ; rate=3/min ; 170/5982 batches
+[03:38:58]   +5 [partial_knowledge] ; total=722 ; rate=3/min ; 171/5982 batches
+[03:41:08]   +1 [partial_knowledge] ; total=723 ; rate=3/min ; 172/5982 batches
+[03:42:57]   +5 [partial_knowledge] ; total=728 ; rate=3/min ; 173/5982 batches
+[03:43:56]   +5 [partial_knowledge] ; total=733 ; rate=3/min ; 174/5982 batches
+[03:45:43]   +4 [partial_knowledge] (succeeded on retry #1)
+[03:45:43]   +4 [partial_knowledge] ; total=737 ; rate=3/min ; 175/5982 batches
+[03:46:26]   +5 [partial_knowledge] ; total=742 ; rate=3/min ; 176/5982 batches
+[03:48:02]   +2 [partial_knowledge] ; total=744 ; rate=3/min ; 177/5982 batches
+[03:52:09]   +1 [partial_knowledge] (succeeded on retry #1)
+[03:52:09]   +1 [partial_knowledge] ; total=745 ; rate=2/min ; 178/5982 batches
+[03:52:26]   +5 [partial_knowledge] (succeeded on retry #1)
+[03:52:26]   +5 [partial_knowledge] ; total=750 ; rate=2/min ; 179/5982 batches
+[03:53:28]   +2 [partial_knowledge] ; total=752 ; rate=2/min ; 180/5982 batches
+[03:54:45]   +5 [partial_knowledge] ; total=757 ; rate=3/min ; 181/5982 batches
+[03:55:04]   +5 [partial_knowledge] ; total=762 ; rate=3/min ; 182/5982 batches
+[03:56:47]   +1 [partial_knowledge] (succeeded on retry #1)
+[03:56:47]   +1 [partial_knowledge] ; total=763 ; rate=3/min ; 183/5982 batches
+[03:58:39]   +5 [partial_knowledge] (succeeded on retry #1)
+[03:58:39]   +5 [partial_knowledge] ; total=768 ; rate=3/min ; 184/5982 batches
+[04:00:44]   +1 [partial_knowledge] ; total=769 ; rate=2/min ; 185/5982 batches
+[04:01:24]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[04:03:22]   +5 [partial_knowledge] ; total=774 ; rate=2/min ; 186/5982 batches
+[04:03:37]   +5 [partial_knowledge] ; total=779 ; rate=3/min ; 187/5982 batches
+[04:04:00]   +5 [partial_knowledge] ; total=784 ; rate=3/min ; 188/5982 batches
+[04:04:25]   +5 [partial_knowledge] ; total=789 ; rate=3/min ; 189/5982 batches
+[04:09:21]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:09:21]   +5 [partial_knowledge] ; total=794 ; rate=3/min ; 190/5982 batches
+[04:09:43]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[04:13:16]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:13:16]   +5 [partial_knowledge] ; total=799 ; rate=2/min ; 191/5982 batches
+[04:15:13]   +1 [partial_knowledge] ; total=800 ; rate=2/min ; 192/5982 batches
+[04:15:35]   +5 [partial_knowledge] ; total=805 ; rate=2/min ; 193/5982 batches
+[04:17:38]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:17:39]   +5 [partial_knowledge] ; total=810 ; rate=2/min ; 194/5982 batches
+[04:18:01]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[04:18:09]   +5 [partial_knowledge] ; total=815 ; rate=3/min ; 195/5982 batches
+[04:20:39]   +2 [partial_knowledge] ; total=817 ; rate=2/min ; 196/5982 batches
+[04:26:27]   +1 [partial_knowledge] (succeeded on retry #1)
+[04:26:27]   +1 [partial_knowledge] ; total=818 ; rate=2/min ; 197/5982 batches
+[04:28:36]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:28:36]   +5 [partial_knowledge] ; total=823 ; rate=2/min ; 198/5982 batches
+[04:29:19]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[04:29:43]   +5 [partial_knowledge] ; total=828 ; rate=2/min ; 199/5982 batches
+[04:32:21]   +2 [partial_knowledge] (succeeded on retry #1)
+[04:32:21]   +2 [partial_knowledge] ; total=830 ; rate=2/min ; 200/5982 batches
+[04:33:55]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:33:55]   +5 [partial_knowledge] ; total=835 ; rate=2/min ; 201/5982 batches
+[04:34:45]   +4 [partial_knowledge] ; total=839 ; rate=2/min ; 202/5982 batches
+[04:34:50]   +5 [partial_knowledge] ; total=844 ; rate=2/min ; 203/5982 batches
+[04:38:11]   +5 [partial_knowledge] ; total=849 ; rate=2/min ; 204/5982 batches
+[04:39:35]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:39:35]   +5 [partial_knowledge] ; total=854 ; rate=2/min ; 205/5982 batches
+[04:39:40]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:39:40]   +5 [partial_knowledge] ; total=859 ; rate=2/min ; 206/5982 batches
+[04:41:44]   +5 [partial_knowledge] ; total=864 ; rate=2/min ; 207/5982 batches
+[04:42:16]   +1 [partial_knowledge] ; total=865 ; rate=2/min ; 208/5982 batches
+[04:42:57]   +5 [partial_knowledge] ; total=870 ; rate=2/min ; 209/5982 batches
+[04:46:38]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:46:38]   +5 [partial_knowledge] ; total=875 ; rate=2/min ; 210/5982 batches
+[04:47:29]   +5 [partial_knowledge] (succeeded on retry #1)
+[04:47:29]   +5 [partial_knowledge] ; total=880 ; rate=2/min ; 211/5982 batches
+[04:47:41]   +5 [partial_knowledge] ; total=885 ; rate=2/min ; 212/5982 batches
+[04:49:34]   +5 [partial_knowledge] ; total=890 ; rate=2/min ; 213/5982 batches
+[04:49:44]   +2 [partial_knowledge] ; total=892 ; rate=2/min ; 214/5982 batches
+[04:51:36]   +1 [partial_knowledge] ; total=893 ; rate=2/min ; 215/5982 batches
+[04:52:01]   +5 [partial_knowledge] ; total=898 ; rate=2/min ; 216/5982 batches
+[04:53:02]   +5 [partial_knowledge] ; total=903 ; rate=3/min ; 217/5982 batches
+[04:53:51]   +5 [partial_knowledge] ; total=908 ; rate=3/min ; 218/5982 batches
+[04:55:20]   +5 [partial_knowledge] (succeeded on retry #2)
+[04:55:20]   +5 [partial_knowledge] ; total=913 ; rate=3/min ; 219/5982 batches
+[04:56:52]   +1 [partial_knowledge] ; total=914 ; rate=3/min ; 220/5982 batches
+[05:04:53]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[05:05:53]   +5 [partial_knowledge] ; total=919 ; rate=2/min ; 221/5982 batches
+[05:08:54]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[05:10:22]   +5 [partial_knowledge] (succeeded on retry #1)
+[05:10:22]   +5 [partial_knowledge] ; total=924 ; rate=2/min ; 222/5982 batches
+[05:15:00]   +5 [partial_knowledge] (succeeded on retry #2)
+[05:15:00]   +5 [partial_knowledge] ; total=929 ; rate=2/min ; 223/5982 batches
+[05:16:53]   +1 [partial_knowledge] (succeeded on retry #2)
+[05:16:53]   +1 [partial_knowledge] ; total=930 ; rate=2/min ; 224/5982 batches
+[05:18:05]   +5 [partial_knowledge] ; total=935 ; rate=2/min ; 225/5982 batches
+[05:21:22]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[05:21:54]   +5 [partial_knowledge] ; total=940 ; rate=2/min ; 226/5982 batches
+[05:23:53]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[05:26:45]   +5 [partial_knowledge] (succeeded on retry #1)
+[05:26:45]   +5 [partial_knowledge] ; total=945 ; rate=2/min ; 227/5982 batches
+[05:29:39]   +5 [partial_knowledge] (succeeded on retry #2)
+[05:29:39]   +5 [partial_knowledge] ; total=950 ; rate=2/min ; 228/5982 batches
+[05:31:33]   +1 [partial_knowledge] ; total=951 ; rate=2/min ; 229/5982 batches
+[05:32:50]   +11 [partial_knowledge] (succeeded on retry #1)
+[05:32:50]   +11 [partial_knowledge] ; total=962 ; rate=2/min ; 230/5982 batches
+[05:37:37]   +4 [partial_knowledge] (succeeded on retry #1)
+[05:37:37]   +4 [partial_knowledge] ; total=966 ; rate=2/min ; 231/5982 batches
+[05:40:06]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[05:41:16]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[05:41:36]   +1 [partial_knowledge] ; total=967 ; rate=2/min ; 232/5982 batches
+[05:42:25]   +4 [partial_knowledge] ; total=971 ; rate=2/min ; 233/5982 batches
+[05:44:25]   +3 [partial_knowledge] ; total=974 ; rate=2/min ; 234/5982 batches
+[05:48:29]   +5 [partial_knowledge] (succeeded on retry #1)
+[05:48:29]   +5 [partial_knowledge] ; total=979 ; rate=2/min ; 235/5982 batches
+[05:49:28]   +5 [partial_knowledge] ; total=984 ; rate=2/min ; 236/5982 batches
+[05:49:57]   +5 [partial_knowledge] ; total=989 ; rate=2/min ; 237/5982 batches
+[05:50:04]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[05:51:31]   +5 [partial_knowledge] ; total=994 ; rate=2/min ; 238/5982 batches
+[05:54:42] === bulk seed generation starting (target=60000, workers=2, batch=5) ===
+[05:54:42] existing accepted seeds: 1086 | {'partial_knowledge': 1086}
+[05:54:42] prepared 11783 batches across categories
+[05:55:03]   +5 [partial_knowledge] ; total=5 ; rate=14/min ; 1/11783 batches
+[05:56:30]   +2 [partial_knowledge] ; total=7 ; rate=4/min ; 2/11783 batches
+[05:59:53]   +5 [partial_knowledge] (succeeded on retry #2)
+[05:59:53]   +5 [partial_knowledge] ; total=12 ; rate=2/min ; 3/11783 batches
+[06:01:59]   +3 [partial_knowledge] ; total=15 ; rate=2/min ; 4/11783 batches
+[06:02:32]   +5 [partial_knowledge] ; total=20 ; rate=3/min ; 5/11783 batches
+[06:04:45]   +6 [partial_knowledge] ; total=26 ; rate=3/min ; 6/11783 batches
+[06:06:29]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[06:12:06]   +2 [partial_knowledge] (succeeded on retry #1)
+[06:12:06]   +2 [partial_knowledge] ; total=28 ; rate=2/min ; 7/11783 batches
+[06:14:13]   +3 [partial_knowledge] ; total=31 ; rate=2/min ; 8/11783 batches
+[06:15:37]   +5 [partial_knowledge] (succeeded on retry #2)
+[06:15:37]   +5 [partial_knowledge] ; total=36 ; rate=2/min ; 9/11783 batches
+[06:17:15]   +5 [partial_knowledge] (succeeded on retry #1)
+[06:17:15]   +5 [partial_knowledge] ; total=41 ; rate=2/min ; 10/11783 batches
+[06:18:46]   +5 [partial_knowledge] (succeeded on retry #1)
+[06:18:46]   +5 [partial_knowledge] ; total=46 ; rate=2/min ; 11/11783 batches
+[06:19:11]   +3 [partial_knowledge] ; total=49 ; rate=2/min ; 12/11783 batches
+[06:19:26]   +5 [partial_knowledge] ; total=54 ; rate=2/min ; 13/11783 batches
+[06:19:43]   +5 [partial_knowledge] ; total=59 ; rate=2/min ; 14/11783 batches
+[06:20:41]   +5 [partial_knowledge] ; total=64 ; rate=2/min ; 15/11783 batches
+[06:21:54]   +2 [partial_knowledge] ; total=66 ; rate=2/min ; 16/11783 batches
+[06:24:37]   +5 [partial_knowledge] ; total=71 ; rate=2/min ; 17/11783 batches
+[06:24:51]   +5 [partial_knowledge] ; total=76 ; rate=3/min ; 18/11783 batches
+[06:26:45]   +5 [partial_knowledge] (succeeded on retry #1)
+[06:26:45]   +5 [partial_knowledge] ; total=81 ; rate=3/min ; 19/11783 batches
+[06:30:42]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[06:33:51]   +5 [partial_knowledge] ; total=86 ; rate=2/min ; 20/11783 batches
+[06:33:57]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[06:40:19]   +1 [partial_knowledge] (succeeded on retry #1)
+[06:40:19]   +1 [partial_knowledge] ; total=87 ; rate=2/min ; 21/11783 batches
+[06:42:45]   +4 [partial_knowledge] ; total=91 ; rate=2/min ; 22/11783 batches
+[06:42:47]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[06:43:36]   +5 [partial_knowledge] ; total=96 ; rate=2/min ; 23/11783 batches
+[06:43:57]   +4 [partial_knowledge] ; total=100 ; rate=2/min ; 24/11783 batches
+[06:44:12]   +2 [partial_knowledge] ; total=102 ; rate=2/min ; 25/11783 batches
+[06:44:54]   +5 [partial_knowledge] ; total=107 ; rate=2/min ; 26/11783 batches
+[06:48:45]   +5 [partial_knowledge] (succeeded on retry #1)
+[06:48:45]   +5 [partial_knowledge] ; total=112 ; rate=2/min ; 27/11783 batches
+[06:52:41]   +5 [partial_knowledge] (succeeded on retry #2)
+[06:52:41]   +5 [partial_knowledge] ; total=117 ; rate=2/min ; 28/11783 batches
+[06:55:23]   +1 [partial_knowledge] ; total=118 ; rate=2/min ; 29/11783 batches
+[06:55:43]   +5 [partial_knowledge] (succeeded on retry #2)
+[06:55:43]   +5 [partial_knowledge] ; total=123 ; rate=2/min ; 30/11783 batches
+[06:56:04]   +5 [partial_knowledge] ; total=128 ; rate=2/min ; 31/11783 batches
+[06:57:03]   +5 [partial_knowledge] ; total=133 ; rate=2/min ; 32/11783 batches
+[07:03:58]   +5 [partial_knowledge] (succeeded on retry #1)
+[07:03:58]   +5 [partial_knowledge] ; total=138 ; rate=2/min ; 33/11783 batches
+[07:06:13]   +5 [partial_knowledge] ; total=143 ; rate=2/min ; 34/11783 batches
+[07:07:14]   +5 [partial_knowledge] ; total=148 ; rate=2/min ; 35/11783 batches
+[07:07:17]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:07:48]   +5 [partial_knowledge] ; total=153 ; rate=2/min ; 36/11783 batches
+[07:10:37]   +5 [partial_knowledge] (succeeded on retry #1)
+[07:10:37]   +5 [partial_knowledge] ; total=158 ; rate=2/min ; 37/11783 batches
+[07:11:21]   +5 [partial_knowledge] ; total=163 ; rate=2/min ; 38/11783 batches
+[07:11:30]   +5 [partial_knowledge] ; total=168 ; rate=2/min ; 39/11783 batches
+[07:13:42]   +1 [partial_knowledge] ; total=169 ; rate=2/min ; 40/11783 batches
+[07:16:26]   +3 [partial_knowledge] (succeeded on retry #2)
+[07:16:26]   +3 [partial_knowledge] ; total=172 ; rate=2/min ; 41/11783 batches
+[07:21:51]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:21:54]   +5 [partial_knowledge] (succeeded on retry #1)
+[07:21:54]   +5 [partial_knowledge] ; total=177 ; rate=2/min ; 42/11783 batches
+[07:31:19]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:32:02]   +5 [partial_knowledge] ; total=182 ; rate=2/min ; 43/11783 batches
+[07:33:22]   +5 [partial_knowledge] ; total=187 ; rate=2/min ; 44/11783 batches
+[07:33:48]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:35:18]   +5 [partial_knowledge] ; total=192 ; rate=2/min ; 45/11783 batches
+[07:35:40]   +5 [partial_knowledge] ; total=197 ; rate=2/min ; 46/11783 batches
+[07:35:57]   +5 [partial_knowledge] ; total=202 ; rate=2/min ; 47/11783 batches
+[07:36:59]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:38:35]   +5 [partial_knowledge] (succeeded on retry #1)
+[07:38:35]   +5 [partial_knowledge] ; total=207 ; rate=2/min ; 48/11783 batches
+[07:40:52]   +4 [partial_knowledge] ; total=211 ; rate=2/min ; 49/11783 batches
+[07:45:08]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[07:45:53]   +5 [partial_knowledge] (succeeded on retry #1)
+[07:45:53]   +5 [partial_knowledge] ; total=216 ; rate=2/min ; 50/11783 batches
+[07:51:43]   +5 [partial_knowledge] (succeeded on retry #2)
+[07:51:43]   +5 [partial_knowledge] ; total=221 ; rate=2/min ; 51/11783 batches
+[07:54:09]   +7 [partial_knowledge] (succeeded on retry #1)
+[07:54:09]   +7 [partial_knowledge] ; total=228 ; rate=2/min ; 52/11783 batches
+[07:54:54]   +5 [partial_knowledge] ; total=233 ; rate=2/min ; 53/11783 batches
+[08:04:22]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:06:12]   +5 [partial_knowledge] (succeeded on retry #2)
+[08:06:12]   +5 [partial_knowledge] ; total=238 ; rate=2/min ; 54/11783 batches
+[08:06:17]   +5 [partial_knowledge] (succeeded on retry #1)
+[08:06:17]   +5 [partial_knowledge] ; total=243 ; rate=2/min ; 55/11783 batches
+[08:07:46]   +5 [partial_knowledge] ; total=248 ; rate=2/min ; 56/11783 batches
+[08:08:14]   +1 [partial_knowledge] ; total=249 ; rate=2/min ; 57/11783 batches
+[08:16:27]   +1 [partial_knowledge] (succeeded on retry #1)
+[08:16:27]   +1 [partial_knowledge] ; total=250 ; rate=2/min ; 58/11783 batches
+[08:16:39]   +3 [partial_knowledge] (succeeded on retry #2)
+[08:16:39]   +3 [partial_knowledge] ; total=253 ; rate=2/min ; 59/11783 batches
+[08:17:41]   +5 [partial_knowledge] ; total=258 ; rate=2/min ; 60/11783 batches
+[08:18:44]   +1 [partial_knowledge] ; total=259 ; rate=2/min ; 61/11783 batches
+[08:19:49]   +5 [partial_knowledge] ; total=264 ; rate=2/min ; 62/11783 batches
+[08:20:40]   +5 [partial_knowledge] ; total=269 ; rate=2/min ; 63/11783 batches
+[08:26:11]   +5 [partial_knowledge] (succeeded on retry #1)
+[08:26:11]   +5 [partial_knowledge] ; total=274 ; rate=2/min ; 64/11783 batches
+[08:27:08]   +5 [partial_knowledge] (succeeded on retry #2)
+[08:27:08]   +5 [partial_knowledge] ; total=279 ; rate=2/min ; 65/11783 batches
+[08:31:04]   +5 [partial_knowledge] (succeeded on retry #1)
+[08:31:04]   +5 [partial_knowledge] ; total=284 ; rate=2/min ; 66/11783 batches
+[08:34:56]   +10 [partial_knowledge] (succeeded on retry #1)
+[08:34:56]   +10 [partial_knowledge] ; total=294 ; rate=2/min ; 67/11783 batches
+[08:35:13]   +5 [partial_knowledge] ; total=299 ; rate=2/min ; 68/11783 batches
+[08:36:59]   +5 [partial_knowledge] ; total=304 ; rate=2/min ; 69/11783 batches
+[08:40:51]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[08:41:39]   +4 [partial_knowledge] ; total=308 ; rate=2/min ; 70/11783 batches
+[08:44:47]   +1 [partial_knowledge] (succeeded on retry #1)
+[08:44:47]   +1 [partial_knowledge] ; total=309 ; rate=2/min ; 71/11783 batches
+[08:45:10]   +5 [partial_knowledge] ; total=314 ; rate=2/min ; 72/11783 batches
+[08:48:03]   +5 [partial_knowledge] (succeeded on retry #2)
+[08:48:03]   +5 [partial_knowledge] ; total=319 ; rate=2/min ; 73/11783 batches
+[08:48:24]   +5 [partial_knowledge] ; total=324 ; rate=2/min ; 74/11783 batches
+[08:53:24]   +2 [partial_knowledge] (succeeded on retry #1)
+[08:53:24]   +2 [partial_knowledge] ; total=326 ; rate=2/min ; 75/11783 batches
+[08:56:34]   +2 [partial_knowledge] (succeeded on retry #1)
+[08:56:34]   +2 [partial_knowledge] ; total=328 ; rate=2/min ; 76/11783 batches
+[09:04:46]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:05:47]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:06:46]   +5 [partial_knowledge] ; total=333 ; rate=2/min ; 77/11783 batches
+[09:11:00]   +5 [partial_knowledge] (succeeded on retry #1)
+[09:11:00]   +5 [partial_knowledge] ; total=338 ; rate=2/min ; 78/11783 batches
+[09:12:00]   +5 [partial_knowledge] (succeeded on retry #1)
+[09:12:00]   +5 [partial_knowledge] ; total=343 ; rate=2/min ; 79/11783 batches
+[09:12:42]   +1 [partial_knowledge] ; total=344 ; rate=2/min ; 80/11783 batches
+[09:15:59]   +5 [partial_knowledge] ; total=349 ; rate=2/min ; 81/11783 batches
+[09:16:52]   +5 [partial_knowledge] ; total=354 ; rate=2/min ; 82/11783 batches
+[09:20:33]   +5 [partial_knowledge] ; total=359 ; rate=2/min ; 83/11783 batches
+[09:21:17]   FAIL [partial_knowledge]: empty_or_unparseable_after_retry
+[09:21:29]   +5 [partial_knowledge] ; total=364 ; rate=2/min ; 84/11783 batches
+[09:25:56]   +5 [partial_knowledge] (succeeded on retry #1)
+[09:25:56]   +5 [partial_knowledge] ; total=369 ; rate=2/min ; 85/11783 batches
+[09:28:26]   +5 [partial_knowledge] (succeeded on retry #1)
+[09:28:26]   +5 [partial_knowledge] ; total=374 ; rate=2/min ; 86/11783 batches
+[09:29:45]   +5 [partial_knowledge] ; total=379 ; rate=2/min ; 87/11783 batches

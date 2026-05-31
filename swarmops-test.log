@@ -1,0 +1,46 @@
+2026/03/21 21:29:57 transport: shadow mode
+2026/03/21 21:29:57 telegram: escalation router started (chat_id=8419931737)
+2026/03/21 21:29:57 swarm hooks: wrote /home/sbarker/.swarmops/swarm/hooks/agent-stop.sh
+2026/03/21 21:29:57 swarm/watchdog: started (heartbeat_timeout=45m0s, absolute=2h0m0s)
+2026/03/21 21:29:57 swarm/config: Plane adapter configured ✓
+2026/03/21 21:29:57 transport: channels MCP endpoints registered at /mcp/channels/{agentID}/{runID}
+2026/03/21 21:29:57 telegram: webhook registered at POST /api/telegram/webhook
+2026/03/21 21:29:57 Server starting on :8080
+2026/03/21 21:29:57 swarm/plane: env-var session not configured; will poll DB autopilot sessions only
+2026/03/21 21:29:58 swarm/ci: poller starting (interval=1m0s)
+2026/03/21 21:29:58 swarm/plane: cached 100 work queue items for project 1974b497
+2026/03/21 21:30:59 swarm/plane: cached 100 work queue items for project 1974b497
+2026/03/21 21:31:00 swarm ws: failed to load state for does-not-exist-abc123: sql: no rows in result set
+2026/03/21 21:31:40 swarm: broadcastSwarmState error for 8924605333ecab9cc1518202917ad159: sql: no rows in result set
+2026/03/21 21:31:47 swarm: broadcastSwarmState error for 4af96c2b05edd03bd6e9344946ba34a4: sql: no rows in result set
+2026/03/21 21:31:59 swarm/plane: cached 100 work queue items for project 1974b497
+2026/03/21 21:32:17 swarm: broadcastSwarmState error for 6e6db0dac0072576fde6ac1904d78283: sql: no rows in result set
+2026/03/21 21:32:53 swarm: broadcastSwarmState error for 352bb13b55aebb2aaabec95a78d2736e: sql: no rows in result set
+2026/03/21 21:32:59 swarm/plane: cached 100 work queue items for project 1974b497
+2026/03/21 21:33:00 swarm: goal 04d1054c complexity=trivial
+2026/03/21 21:33:00 swarm: goal 04d1054c spec task queued — no idle workers, autodispatch will pick up
+2026/03/21 21:33:00 swarm: broadcastSwarmState error for d75503a87eaf2e4097bf595a3dd183f3: sql: no rows in result set
+2026/03/21 21:33:01 swarm: goal 28ddc79e complexity=trivial
+2026/03/21 21:33:01 swarm: goal 28ddc79e spec task queued — no idle workers, autodispatch will pick up
+2026/03/21 21:33:02 swarm ws: failed to load state for b34055a0d1273276d444943ead0b1059: sql: no rows in result set
+2026/03/21 21:33:04 Error counting credentials in middleware: database is locked (5) (SQLITE_BUSY)
+2026/03/21 21:33:04 swarm: goal 319976dd complexity=trivial
+2026/03/21 21:33:04 swarm: goal 319976dd spec task queued — no idle workers, autodispatch will pick up
+2026/03/21 21:33:13 Error counting credentials in middleware: database is locked (5) (SQLITE_BUSY)
+2026/03/21 21:33:13 swarm: goal 4e389e0d complexity=trivial
+2026/03/21 21:33:13 swarm: goal 4e389e0d spec task queued — no idle workers, autodispatch will pick up
+2026/03/21 21:33:13 swarm: broadcastSwarmState error for 4fc002fb9ec50666c44c372cc7200d56: sql: no rows in result set
+2026/03/21 21:33:18 swarm: goal ea491691 complexity=trivial
+2026/03/21 21:33:18 swarm: goal ea491691 spec task queued — no idle workers, autodispatch will pick up
+2026/03/21 21:33:18 swarm: broadcastSwarmState error for 92b541145cff02f447608f671c849867: sql: no rows in result set
+2026/03/21 21:33:32 Error counting credentials in middleware: database is locked (5) (SQLITE_BUSY)
+2026/03/21 21:33:59 swarm/plane: cached 100 work queue items for project 1974b497
+2026/03/21 21:34:32 swarm: goal 20c05abd complexity=trivial
+2026/03/21 21:34:32 swarm: goal 20c05abd spec task queued — no idle workers, autodispatch will pick up
+2026/03/21 21:34:36 Error counting credentials in middleware: database is locked (5) (SQLITE_BUSY)
+2026/03/21 21:34:36 swarm: goal 585ad6eb complexity=trivial
+2026/03/21 21:34:36 swarm: goal 585ad6eb spec task queued — no idle workers, autodispatch will pick up
+2026/03/21 21:34:36 swarm: broadcastSwarmState error for 5cb484b309d67635ad84fb5b1797ad1f: sql: no rows in result set
+2026/03/21 21:34:59 swarm/plane: cached 100 work queue items for project 1974b497
+2026/03/21 21:35:59 swarm/plane: cached 100 work queue items for project 1974b497
+2026/03/21 21:36:59 swarm/plane: cached 100 work queue items for project 1974b497

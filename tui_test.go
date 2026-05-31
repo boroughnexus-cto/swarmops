@@ -1269,6 +1269,7 @@ type fakeSwarmClient struct {
 	RenameErr    error
 	PoolResp     map[string]interface{}
 	ConfigValues map[string]string
+	QuotaResp    *QuotaData
 	HealthErr    error
 
 	Calls []string // e.g. "Spawn", "listSessions", "deleteSession:id"
@@ -1325,6 +1326,11 @@ func (f *fakeSwarmClient) listAuditEvents(limit int) ([]ManagedSessionEvent, err
 func (f *fakeSwarmClient) healthCheck() error {
 	f.Calls = append(f.Calls, "healthCheck")
 	return f.HealthErr
+}
+
+func (f *fakeSwarmClient) quota() (*QuotaData, error) {
+	f.Calls = append(f.Calls, "quota")
+	return f.QuotaResp, nil
 }
 
 // newFakeModel returns a tuiModel wired to a fakeSwarmClient for key-handler testing.

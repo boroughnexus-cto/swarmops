@@ -99,7 +99,6 @@ type activityTickMsg time.Time // activity detection tick (1s)
 type flashClearMsg struct{}    // auto-clear flash message
 type sessionsMsg []Session
 type terminalMsg string
-type contextListMsg []contextItem
 type itemsMsg struct {
 	items    []sidebarItem
 	captures []sessionCapture
@@ -114,11 +113,6 @@ type profileRestartDoneMsg struct {
 	happierFound bool // true if new happier session ID was discovered
 }
 
-type contextItem struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
 // ─── Model ───────────────────────────────────────────────────────────────────
 
 type tuiMode int
@@ -129,13 +123,11 @@ const (
 	modeNewDir
 	modeNewMission
 	modeNewModel
-	modeContextPick
 	modePlaneIssues
 	modeIcingaAlerts
 	modePopupAction
 	modeRename
 	modeEditMission
-	modeActionContext // context picker within action/dispatch flow
 	modeFeedbackType
 	modeFeedbackText
 	modeAuditLog
@@ -145,14 +137,14 @@ const (
 
 // Spawner abstracts session creation for testability.
 type Spawner interface {
-	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error)
+	Spawn(ctx context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error)
 }
 
 // defaultSpawner calls the real spawnSession function.
 type defaultSpawner struct{}
 
-func (defaultSpawner) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
-	return spawnSession(ctx, name, dir, contextID, contextName, mission, model, profile, nil, nil, nil, envOverrides)
+func (defaultSpawner) Spawn(ctx context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
+	return spawnSession(ctx, name, dir, mission, model, profile, envOverrides)
 }
 
 type tuiModel struct {
@@ -169,9 +161,6 @@ type tuiModel struct {
 	newDirInput     textinput.Model
 	newMissionInput textinput.Model
 	newModel        int    // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
-	contexts        []contextItem
-	ctxCursor       int
-
 	// Edit profile / edit directory inputs
 	editProfileIdx int           // index in profileOptions slice
 	editDirInput   textinput.Model
@@ -743,35 +732,6 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, flashClearCmd()
 
-	case contextListMsg:
-		m.contexts = msg
-		if m.mode == modeActionContext {
-			// Context list arrived for dispatch flow — stay in picker
-			m.actionCtxCursor = 0
-			return m, nil
-		}
-		// Spawn flow
-		if len(m.contexts) > 0 {
-			m.mode = modeContextPick
-			m.ctxCursor = 0
-		} else {
-			m.doSpawn(nil, nil)
-			m.mode = modePassthrough
-		}
-		return m, loadItemsCmd(m.api)
-
-	case contextContentMsg:
-		if msg.err != nil {
-			m.flash = "Context error: " + msg.err.Error()
-			// Dispatch without context on error
-			m.doDispatch(m.actionPrompt)
-		} else {
-			// Prepend context content to prompt
-			enrichedPrompt := msg.content + "\n\n---\n\n" + m.actionPrompt
-			m.doDispatch(enrichedPrompt)
-		}
-		return m, loadItemsCmd(m.api)
-
 	case tea.MouseMsg:
 		if m.mode == modePassthrough && m.vpReady {
 			oldOffset := m.vp.YOffset
@@ -1155,8 +1115,8 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
-			m.flash = "Fetching contexts..."
-			return m, fetchContexts()
+			m.doSpawn()
+			return m, nil
 		case "esc":
 			m.mode = modePassthrough
 			m.flash = ""
@@ -1357,30 +1317,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.feedbackInput, cmd = m.feedbackInput.Update(msg)
 			return m, cmd
 		}
-	case modeContextPick:
-		switch key {
-		case "alt+a", "up":
-			if m.ctxCursor > 0 {
-				m.ctxCursor--
-			}
-		case "alt+z", "down":
-			if m.ctxCursor < len(m.contexts) {
-				m.ctxCursor++
-			}
-		case "enter":
-			if m.ctxCursor == 0 {
-				m.doSpawn(nil, nil)
-			} else {
-				c := m.contexts[m.ctxCursor-1]
-				m.doSpawn(&c.ID, &c.Name)
-			}
-			m.mode = modePassthrough
-			m.flash = ""
-			return m, loadItemsCmd(m.api)
-		case "esc":
-			m.mode = modePassthrough
-			m.flash = ""
-		}
+
 
 	case modePlaneIssues:
 		filtered := filteredPlaneIssues(m)
@@ -1526,39 +1463,11 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.actionCursor++
 			}
 		case "enter":
-			// Remember which session was chosen, then show context picker
+			// Remember which session was chosen, then dispatch
 			m.actionChosenIdx = m.actionCursor
-			m.actionCtxCursor = 0
-			m.mode = modeActionContext
-			m.flash = "Add context? (↑↓ to pick, Enter to confirm, Esc to skip)"
-			if m.contexts == nil {
-				return m, fetchContexts()
-			}
-		}
-
-	case modeActionContext:
-		switch key {
-		case "alt+a", "up":
-			if m.actionCtxCursor > 0 {
-				m.actionCtxCursor--
-			}
-		case "alt+z", "down":
-			if m.actionCtxCursor < len(m.contexts) {
-				m.actionCtxCursor++
-			}
-		case "esc":
-			// Skip context — dispatch with raw prompt
 			m.doDispatch(m.actionPrompt)
-		case "enter":
-			if m.actionCtxCursor == 0 {
-				// "(none)" selected — dispatch without context
-				m.doDispatch(m.actionPrompt)
-			} else {
-				// Fetch context content, then dispatch
-				ctx := m.contexts[m.actionCtxCursor-1]
-				m.flash = fmt.Sprintf("Loading %s context...", ctx.Name)
-				return m, fetchContextContent(ctx.Name)
-			}
+			m.mode = m.actionPrevMode
+			return m, loadItemsCmd(m.api)
 		}
 	}
 
@@ -1654,7 +1563,7 @@ func (m *tuiModel) sendKeyToSession(key string) {
 	exec.Command("tmux", "send-keys", "-t", item.tmuxSession, tmuxKey).Run()
 }
 
-func (m *tuiModel) doSpawn(contextID, contextName *string) {
+func (m *tuiModel) doSpawn() {
 	name := m.newNameInput.Value()
 	dir := m.newDirInput.Value()
 	if dir == "" {
@@ -1668,7 +1577,7 @@ func (m *tuiModel) doSpawn(contextID, contextName *string) {
 	profile := profileFromIndex(m.newModel)
 	envOverrides := envOverridesFromIndex(m.newModel)
 	name = autoPrefixSessionName(name, model, envOverrides)
-	s, err := m.spawner.Spawn(context.Background(), name, dir, contextID, contextName, mission, model, profile, envOverrides)
+	s, err := m.spawner.Spawn(context.Background(), name, dir, mission, model, profile, envOverrides)
 	if err != nil {
 		m.flash = "Spawn error: " + err.Error()
 	} else {
@@ -1689,7 +1598,7 @@ func (m *tuiModel) doDispatch(prompt string) {
 	} else {
 		// Spawn new session
 		name := sanitizeSessionName(m.actionTarget)
-		s, err := m.spawner.Spawn(context.Background(), name, os.Getenv("HOME"), nil, nil, nil, "", "", nil)
+		s, err := m.spawner.Spawn(context.Background(), name, os.Getenv("HOME"), nil, "", "", nil)
 		if err != nil {
 			m.flash = "Spawn error: " + err.Error()
 		} else {
@@ -1871,8 +1780,6 @@ func (m tuiModel) View() string {
 		return renderAuditPopup(m)
 	case modePopupAction:
 		return renderActionPicker(m)
-	case modeActionContext:
-		return renderDispatchContextPicker(m)
 	}
 
 	sidebar := m.renderSidebar()
@@ -1911,8 +1818,6 @@ func (m tuiModel) View() string {
 		statusLine = "Feedback: " + strings.Join(parts, "  ")
 	case modeFeedbackText:
 		statusLine = "Feedback: " + m.feedbackInput.View()
-	case modeContextPick:
-		statusLine = m.renderContextPicker()
 	default:
 		if m.flash != "" {
 			statusLine = dimStyle.Render(m.flash)
@@ -2193,80 +2098,6 @@ func (m tuiModel) renderPoolSlotDetail(item sidebarItem) string {
 	b.WriteString(fmt.Sprintf("  Requests:  %d\n", item.requests))
 	b.WriteString(fmt.Sprintf("  Cost:      $%.4f\n", item.costUSD))
 	return b.String()
-}
-
-func (m tuiModel) renderContextPicker() string {
-	// Build all options: 0=(none), i+1=contexts[i]
-	total := len(m.contexts) + 1
-	rawLabels := make([]string, total)
-	rawLabels[0] = "(none)"
-	for i, c := range m.contexts {
-		rawLabels[i+1] = c.Name
-	}
-
-	// Sliding window of 4 around cursor
-	const windowSize = 4
-	start := m.ctxCursor - windowSize/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + windowSize
-	if end > total {
-		end = total
-		if start = end - windowSize; start < 0 {
-			start = 0
-		}
-	}
-
-	// Calculate max label length that fits within terminal width.
-	// Budget: prefix + arrows (2) + separators (3 each between items) + 2 brackets on selected.
-	prefix := fmt.Sprintf("Context: (%d/%d) ", m.ctxCursor, total-1)
-	arrowBudget := 0
-	if start > 0 {
-		arrowBudget += 4 // "← │ "
-	}
-	if end < total {
-		arrowBudget += 4 // " │ →"
-	}
-	nItems := end - start
-	sepBudget := 3 * (nItems - 1) // " │ " between items
-	bracketBudget := 2             // "[" + "]" around selected item
-	available := m.w - len(prefix) - arrowBudget - sepBudget - bracketBudget
-	maxLabelLen := available / nItems
-	if maxLabelLen < 8 {
-		maxLabelLen = 8 // minimum readable length
-	}
-
-	// Truncate labels to fit
-	labels := make([]string, total)
-	for i, lbl := range rawLabels {
-		if len(lbl) > maxLabelLen {
-			cut := maxLabelLen - 3
-			if cut < 1 {
-				cut = 1
-			}
-			labels[i] = lbl[:cut] + "..."
-		} else {
-			labels[i] = lbl
-		}
-	}
-
-	var parts []string
-	if start > 0 {
-		parts = append(parts, dimStyle.Render("←"))
-	}
-	for i := start; i < end; i++ {
-		lbl := labels[i]
-		if i == m.ctxCursor {
-			lbl = selectedStyle.Render("[" + lbl + "]")
-		}
-		parts = append(parts, lbl)
-	}
-	if end < total {
-		parts = append(parts, dimStyle.Render("→"))
-	}
-
-	return prefix + strings.Join(parts, " │ ")
 }
 
 // runTUI starts the Bubbletea TUI. Database, config, and pool must be initialised by main().

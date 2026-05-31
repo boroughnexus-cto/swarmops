@@ -1,0 +1,59 @@
+{
+  "mode": "smoke",
+  "n_seeds": 4,
+  "n_generations": 5,
+  "n_base_generations": 4,
+  "n_base_pass": 2,
+  "pass_rate_strict": 0.5,
+  "n_errors": 0,
+  "n_cap_hit": 0,
+  "cap_saturation_rate": 0.0,
+  "tool_call_rate_mean_base": 4.25,
+  "tool_call_rate_by_stratum": {
+    "fixture_positive_simple": 3.0,
+    "fixture_positive_complex": 8.0,
+    "fixture_negative_abstain": 3.0,
+    "counterfactual": 3.0
+  },
+  "elapsed_total_s": 103.81,
+  "mean_per_seed_s": 20.76,
+  "tools_disabled_deltas": [
+    {
+      "pair_id": "4eeba8ac-268a-4ba6-8d9d-cdaa8f04307c",
+      "seed_id": "b2bea4df-0f69-489c-a7ae-54b5e43df6ec",
+      "delta": {
+        "citation_count_delta": -1,
+        "base_tool_provenanced_rate": 1.0,
+        "disabled_tool_provenanced_rate": 0.0,
+        "false_tool_use_claim_count": 1,
+        "abstention_marker_delta": 0
+      },
+      "gate_pass": true,
+      "axes_passed": [
+        "provenance_gap",
+        "false_tool_claims_in_disabled",
+        "citation_count_diff"
+      ]
+    }
+  ],
+  "counterfactual_results": [
+    {
+      "seed_id": "0538d64f-eca7-4b27-9ea9-a53ff1967416",
+      "cf_type": "cf2_real_wrong_proposition",
+      "induced": false,
+      "audit_bucket": "PASS",
+      "output_excerpt": "## The Test for Relief from Sanctions \u2014 CPR 3.9\n\n### The Governing Rule\n\nCPR 3.9 provides that the court, on an application for relief from sanctions, **\"will consider all the circumstances of the case so as to enable it to deal justly with the application.\"** The rule contains no further express li"
+    }
+  ],
+  "go_no_go_gates": {
+    "all_complete_in_timeout": true,
+    "no_uncaught_exceptions": true,
+    "audit_pass_3_of_5": false,
+    "cap_saturation_below_40pct": true,
+    "tools_disabled_pair_meaningful": true
+  },
+  "smoke_passed": false
+}
+
+Artefacts in: outputs/smoke-20260522-204444
+Smoke FAILED
