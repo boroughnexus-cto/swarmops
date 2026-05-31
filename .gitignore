@@ -31,3 +31,18 @@ remote-code.db
 remote-code-test*.db*
 .worktrees/
 scratch/
+# Runtime/generated artefacts
+*.log
+*.pid
+*.jsonl
+.overnight/
+TASK.md
+# Secrets and local credentials
+!.env.example
+*.pem
+*.key
+*token*
+*credential*
+*secret*
+*.dump
+*.sql
