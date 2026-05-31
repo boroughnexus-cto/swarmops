@@ -28,24 +28,33 @@ func TestEffectiveModel(t *testing.T) {
 func TestResumeClaudeCmdAlwaysPassesModel(t *testing.T) {
 	t.Setenv("SWARMOPS_DEFAULT_MODEL", "")
 
+	// With happier available, model is passed via ANTHROPIC_MODEL env var
 	args := resumeClaudeCmd("", "")
-	if !containsPair(args, "--model", "sonnet") {
-		t.Errorf("resumeClaudeCmd with empty model should include --model sonnet; got %v", args)
+	if !containsEnv(args, "ANTHROPIC_MODEL=sonnet") {
+		t.Errorf("resumeClaudeCmd with empty model should set ANTHROPIC_MODEL=sonnet; got %v", args)
 	}
 
 	args = resumeClaudeCmd("happier-abc", "opus")
-	if !containsPair(args, "--model", "opus") {
-		t.Errorf("resumeClaudeCmd should preserve explicit model; got %v", args)
+	if !containsEnv(args, "ANTHROPIC_MODEL=opus") {
+		t.Errorf("resumeClaudeCmd should preserve explicit model via env; got %v", args)
 	}
-	if !containsPair(args, "--existing-session", "happier-abc") {
-		t.Errorf("resumeClaudeCmd should pass --existing-session for non-UUID id; got %v", args)
-	}
+	// happier --yolo does not use --existing-session flag
 }
 
 // containsPair returns true if args contains flag immediately followed by value.
 func containsPair(args []string, flag, value string) bool {
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == flag && args[i+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+// containsEnv returns true if args contains an env KEY=value pair.
+func containsEnv(args []string, kv string) bool {
+	for _, arg := range args {
+		if arg == kv {
 			return true
 		}
 	}

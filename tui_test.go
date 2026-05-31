@@ -30,15 +30,14 @@ type mockSpawner struct {
 }
 
 type spawnCall struct {
-	name, dir              string
-	contextID, contextName *string
-	mission                *string
-	model, profile         string
-	envOverrides           map[string]string
+	name, dir       string
+	mission         *string
+	model, profile  string
+	envOverrides    map[string]string
 }
 
-func (m *mockSpawner) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
-	m.calls = append(m.calls, spawnCall{name, dir, contextID, contextName, mission, model, profile, envOverrides})
+func (m *mockSpawner) Spawn(_ context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
+	m.calls = append(m.calls, spawnCall{name, dir, mission, model, profile, envOverrides})
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -74,6 +73,7 @@ func newTestModel(items []sidebarItem) tuiModel {
 		items:           items,
 		w:               testWidth,
 		h:               testHeight,
+		sidebarWidth:    24,
 	}
 
 	// Initialize viewport
@@ -331,22 +331,6 @@ func TestView_NewDirMode(t *testing.T) {
 	assertContains(t, view, "Dir:")
 }
 
-func TestView_ContextPickerMode(t *testing.T) {
-	m := newTestModel(nil)
-	m.mode = modeContextPick
-	m.contexts = []contextItem{
-		{ID: "ctx-1", Name: "swarmops"},
-		{ID: "ctx-2", Name: "homelab"},
-	}
-	m.ctxCursor = 0
-	view := viewStripped(m)
-
-	assertContains(t, view, "Context:")
-	assertContains(t, view, "(none)")
-	assertContains(t, view, "swarmops")
-	assertContains(t, view, "homelab")
-}
-
 // ─── Key handling / state transition tests ──────────────────────────────────
 
 func TestKey_CursorDown(t *testing.T) {
@@ -476,119 +460,6 @@ func TestKey_EscCancelsNewDir(t *testing.T) {
 	m = sendSpecialKey(m, "esc")
 	if m.mode != modePassthrough {
 		t.Errorf("esc should return to passthrough, got %d", m.mode)
-	}
-}
-
-func TestKey_EscCancelsContextPick(t *testing.T) {
-	m := newTestModel(nil)
-	m.mode = modeContextPick
-	m.contexts = []contextItem{{ID: "1", Name: "ctx"}}
-	m.ctxCursor = 0
-
-	m = sendSpecialKey(m, "esc")
-	if m.mode != modePassthrough {
-		t.Errorf("esc should return to passthrough, got %d", m.mode)
-	}
-}
-
-func TestKey_ContextPickNavigation(t *testing.T) {
-	m := newTestModel(nil)
-	m.mode = modeContextPick
-	m.contexts = []contextItem{
-		{ID: "1", Name: "alpha"},
-		{ID: "2", Name: "beta"},
-	}
-	m.ctxCursor = 0
-
-	// Move down
-	m = sendSpecialKey(m, "alt+z")
-	if m.ctxCursor != 1 {
-		t.Errorf("alt+z should move context cursor to 1, got %d", m.ctxCursor)
-	}
-
-	m = sendSpecialKey(m, "alt+z")
-	if m.ctxCursor != 2 {
-		t.Errorf("alt+z should move context cursor to 2, got %d", m.ctxCursor)
-	}
-
-	// Clamp at bottom (0=none, 1=alpha, 2=beta → max is 2)
-	m = sendSpecialKey(m, "alt+z")
-	if m.ctxCursor != 2 {
-		t.Errorf("context cursor should clamp at bottom, got %d", m.ctxCursor)
-	}
-
-	// Move back up
-	m = sendSpecialKey(m, "alt+a")
-	if m.ctxCursor != 1 {
-		t.Errorf("alt+a should move context cursor to 1, got %d", m.ctxCursor)
-	}
-}
-
-func TestKey_ContextPickSelectNone(t *testing.T) {
-	spawner := &mockSpawner{}
-	m := newTestModel(nil)
-	m.spawner = spawner
-	m.mode = modeContextPick
-	m.contexts = []contextItem{{ID: "1", Name: "alpha"}}
-	m.ctxCursor = 0 // (none)
-	m.newNameInput.SetValue("test-sess")
-	m.newDirInput.SetValue("/tmp")
-
-	m = sendSpecialKey(m, "enter")
-	if m.mode != modePassthrough {
-		t.Errorf("enter should return to passthrough, got %d", m.mode)
-	}
-	if len(spawner.calls) != 1 {
-		t.Fatalf("expected 1 spawn call, got %d", len(spawner.calls))
-	}
-	if spawner.calls[0].contextID != nil {
-		t.Errorf("selecting (none) should pass nil contextID")
-	}
-}
-
-func TestKey_ContextPickSelectContext(t *testing.T) {
-	spawner := &mockSpawner{}
-	m := newTestModel(nil)
-	m.spawner = spawner
-	m.mode = modeContextPick
-	m.contexts = []contextItem{{ID: "ctx-1", Name: "alpha"}}
-	m.ctxCursor = 1 // alpha
-	m.newNameInput.SetValue("test-sess")
-	m.newDirInput.SetValue("/tmp")
-
-	m = sendSpecialKey(m, "enter")
-	if m.mode != modePassthrough {
-		t.Errorf("enter should return to passthrough, got %d", m.mode)
-	}
-	if len(spawner.calls) != 1 {
-		t.Fatalf("expected 1 spawn call, got %d", len(spawner.calls))
-	}
-	if spawner.calls[0].contextID == nil || *spawner.calls[0].contextID != "ctx-1" {
-		t.Errorf("selecting alpha should pass contextID=ctx-1, got %v", spawner.calls[0].contextID)
-	}
-}
-
-func TestKey_SpawnError(t *testing.T) {
-	// Note: the contextPick enter handler clears flash after doSpawn (m.flash = ""),
-	// so we verify the spawn was attempted via the mock rather than the flash.
-	spawner := &mockSpawner{err: fmt.Errorf("tmux failed")}
-	m := newTestModel(nil)
-	m.spawner = spawner
-	m.mode = modeContextPick
-	m.contexts = []contextItem{}
-	m.ctxCursor = 0
-	m.newNameInput.SetValue("fail-sess")
-
-	m = sendSpecialKey(m, "enter")
-	if len(spawner.calls) != 1 {
-		t.Fatalf("expected 1 spawn call, got %d", len(spawner.calls))
-	}
-	if spawner.calls[0].name != "fail-sess" {
-		t.Errorf("spawn should be called with name fail-sess, got %q", spawner.calls[0].name)
-	}
-	// Mode should return to passthrough even on error
-	if m.mode != modePassthrough {
-		t.Errorf("should return to passthrough after spawn error, got %d", m.mode)
 	}
 }
 
@@ -748,45 +619,6 @@ func TestTerminalMsg_UpdatesContent(t *testing.T) {
 	}
 	if m.contentCache != m.termContent {
 		t.Errorf("contentCache should match termContent")
-	}
-}
-
-func TestContextListMsg_NoContexts(t *testing.T) {
-	spawner := &mockSpawner{}
-	m := newTestModel(nil)
-	m.spawner = spawner
-	m.newNameInput.SetValue("test")
-
-	updated, _ := m.Update(contextListMsg(nil))
-	m = updated.(tuiModel)
-
-	// With no contexts, should spawn directly and return to passthrough
-	if m.mode != modePassthrough {
-		t.Errorf("should return to passthrough with no contexts, got %d", m.mode)
-	}
-	if len(spawner.calls) != 1 {
-		t.Errorf("should have spawned session, got %d calls", len(spawner.calls))
-	}
-}
-
-func TestContextListMsg_WithContexts(t *testing.T) {
-	m := newTestModel(nil)
-	contexts := []contextItem{
-		{ID: "1", Name: "alpha"},
-		{ID: "2", Name: "beta"},
-	}
-
-	updated, _ := m.Update(contextListMsg(contexts))
-	m = updated.(tuiModel)
-
-	if m.mode != modeContextPick {
-		t.Errorf("should enter contextPick mode, got %d", m.mode)
-	}
-	if len(m.contexts) != 2 {
-		t.Errorf("should have 2 contexts, got %d", len(m.contexts))
-	}
-	if m.ctxCursor != 0 {
-		t.Errorf("context cursor should start at 0, got %d", m.ctxCursor)
 	}
 }
 
@@ -1275,7 +1107,7 @@ type fakeSwarmClient struct {
 	Calls []string // e.g. "Spawn", "listSessions", "deleteSession:id"
 }
 
-func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
+func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
 	f.Calls = append(f.Calls, "Spawn")
 	if f.SpawnErr != nil {
 		return nil, f.SpawnErr
@@ -1673,98 +1505,6 @@ func TestHandleKey_NewSessionWizard_MissionEsc(t *testing.T) {
 
 // ─── handleKey: context picker ───────────────────────────────────────────────
 
-func TestHandleKey_ContextPicker_Navigation(t *testing.T) {
-	m := newFakeModel(nil, nil)
-	m.mode = modeContextPick
-	m.contexts = []contextItem{
-		{ID: "ctx-1", Name: "alpha"},
-		{ID: "ctx-2", Name: "beta"},
-	}
-	m.ctxCursor = 0
-
-	// down moves cursor
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z"), Alt: true})
-	m = updated.(tuiModel)
-	if m.ctxCursor != 1 {
-		t.Errorf("expected ctxCursor 1, got %d", m.ctxCursor)
-	}
-
-	// up moves back
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true})
-	m = updated.(tuiModel)
-	if m.ctxCursor != 0 {
-		t.Errorf("expected ctxCursor 0, got %d", m.ctxCursor)
-	}
-
-	// up at 0 doesn't go negative
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true})
-	m = updated.(tuiModel)
-	if m.ctxCursor < 0 {
-		t.Errorf("ctxCursor should not go negative, got %d", m.ctxCursor)
-	}
-}
-
-func TestHandleKey_ContextPicker_EscCancels(t *testing.T) {
-	m := newFakeModel(nil, nil)
-	m.mode = modeContextPick
-
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m = updated.(tuiModel)
-	if m.mode != modePassthrough {
-		t.Errorf("esc from modeContextPick should return to modePassthrough, got %d", m.mode)
-	}
-}
-
-func TestHandleKey_ContextPicker_EnterNoContext(t *testing.T) {
-	client := &fakeSwarmClient{}
-	m := newFakeModel(client, nil)
-	m.mode = modeContextPick
-	m.contexts = []contextItem{{ID: "ctx-1", Name: "alpha"}}
-	m.ctxCursor = 0 // cursor=0 means "no context"
-	m.newNameInput.SetValue("test-session")
-
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(tuiModel)
-
-	if m.mode != modePassthrough {
-		t.Errorf("expected modePassthrough after context pick enter, got %d", m.mode)
-	}
-	found := false
-	for _, c := range client.Calls {
-		if c == "Spawn" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected Spawn call, got: %v", client.Calls)
-	}
-}
-
-func TestHandleKey_ContextPicker_EnterWithContext(t *testing.T) {
-	client := &fakeSwarmClient{}
-	m := newFakeModel(client, nil)
-	m.mode = modeContextPick
-	m.contexts = []contextItem{{ID: "ctx-1", Name: "alpha"}}
-	m.ctxCursor = 1 // cursor=1 means contexts[0]
-	m.newNameInput.SetValue("test-session")
-
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(tuiModel)
-
-	if m.mode != modePassthrough {
-		t.Errorf("expected modePassthrough, got %d", m.mode)
-	}
-	found := false
-	for _, c := range client.Calls {
-		if c == "Spawn" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected Spawn call with context, got: %v", client.Calls)
-	}
-}
-
 // ─── handleKey: feedback flow ────────────────────────────────────────────────
 
 func TestHandleKey_FeedbackFlow_ToggleAndCancel(t *testing.T) {
@@ -1841,3 +1581,4 @@ func TestHandleKey_FeedbackText_EmptyEnterCancels(t *testing.T) {
 		t.Errorf("empty feedback enter should return to modePassthrough, got %d", m.mode)
 	}
 }
+

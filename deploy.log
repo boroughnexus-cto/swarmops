@@ -10389,3 +10389,8 @@ fatal: unable to access 'https://github.com/boroughnexus-cto/swarmops.git/': Sen
   ⚠ tests failed — deploying anyway (was passing before pull)
   service restarted
   stamped .deployed-sha=30c997a6e80038949e59a38aae88d3de4ebbe16c
+[Sun May 31 21:54:00 BST 2026] Deploying 30c997a6e80038949e59a38aae88d3de4ebbe16c -> ab11b5e1f4667b12800a5325fea471504252a2fe
+  built 18501960 bytes
+  ⚠ tests failed — deploying anyway (was passing before pull)
+  service restarted
+  stamped .deployed-sha=ab11b5e1f4667b12800a5325fea471504252a2fe

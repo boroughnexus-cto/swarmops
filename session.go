@@ -94,10 +94,9 @@ func createSession(ctx context.Context, name, directory string, mission *string,
 	now := time.Now().Unix()
 
 	_, err := database.ExecContext(ctx,
-		`INSERT INTO managed_sessions (id, name, tmux_session, directory, mission, model, profile, hidden, status, created_at, updated_at, worktree_path, git_branch, repo_path)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`,
-		id, name, tmuxName, directory, mission, nullableString(model), nullableString(profile), boolToInt(hidden), now, now,
-		nil, nil, nil,
+		`INSERT INTO managed_sessions (id, name, tmux_session, directory, mission, model, profile, hidden, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, name, tmuxName, directory, mission, nullableString(model), nullableString(profile), boolToInt(hidden), "running", now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert session: %w", err)
