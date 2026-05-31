@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -95,6 +96,17 @@ func main() {
 	}()
 	log.Printf("SwarmOps server listening on %s", server.Addr)
 
+	// Start the quota-proxy sidecar
+	const quotaProxyPort = 8082
+	exePath, _ := os.Executable()
+	quotaProxyPath := filepath.Join(filepath.Dir(exePath), "quota-proxy")
+	quotaProxy, err := startQuotaProxy(quotaProxyPath, quotaProxyPort)
+	if err != nil {
+		log.Printf("WARNING: could not start quota-proxy at %s: %v (continuing without usage tracking)", quotaProxyPath, err)
+	} else {
+		log.Printf("quota-proxy started on port %d (ANTHROPIC_BASE_URL=http://localhost:%d for sessions)", quotaProxyPort, quotaProxyPort)
+	}
+
 	// Pool init is slow (spawns 6 Claude CLI sessions) — runs after HTTP is up
 	initPool(ctx)
 
@@ -147,6 +159,13 @@ func main() {
 	}
 
 	cancel()
+
+	// Stop the quota-proxy sidecar
+	if quotaProxy != nil && quotaProxy.Process != nil {
+		quotaProxy.Process.Kill()
+		quotaProxy.Wait()
+		log.Printf("quota-proxy stopped")
+	}
 
 	// Final scrollback save before shutdown
 	log.Printf("Saving session scrollbacks before shutdown...")
@@ -359,6 +378,27 @@ func newHTTPServer() *http.Server {
 
 	mux.HandleFunc("/api/", handleAPI)
 
+	// Quota proxy: transparently forward /api/quota → quota-proxy on QUOTA_PROXY_PORT
+	const quotaProxyPort = 8082
+	mux.HandleFunc("/api/quota", func(w http.ResponseWriter, r *http.Request) {
+		proxyURL := fmt.Sprintf("http://localhost:%d/quota", quotaProxyPort)
+		req, _ := http.NewRequestWithContext(r.Context(), r.Method, proxyURL, r.Body)
+		req.Header = r.Header.Clone()
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil || resp == nil {
+			http.Error(w, `{"error":"quota-proxy unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+		defer resp.Body.Close()
+		for k, v := range resp.Header {
+			if k == "Content-Type" || k == "Content-Length" {
+				w.Header().Set(k, v[0])
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+	})
+
 	// MCP server endpoint
 	enablePoolTools := os.Getenv("SWARMOPS_MCP_POOL_TOOLS") == "true"
 	globalServices = &Services{db: database, pool: globalPool, config: globalConfigService}
@@ -379,6 +419,37 @@ func newHTTPServer() *http.Server {
 		Addr:    ":" + port, // Binds 0.0.0.0 — pool API used by Hermes over Tailscale
 		Handler: mux,
 	}
+}
+
+// startQuotaProxy starts the quota-proxy sidecar binary and returns the process.
+// The proxy listens on localhost:port and forwards requests to api.anthropic.com,
+// capturing anthropic-ratelimit-unified-* headers and exposing them at /quota.
+func startQuotaProxy(path string, port int) (*exec.Cmd, error) {
+	if path == "" {
+		path = "quota-proxy"
+	}
+	// Check if the binary exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil, fmt.Errorf("quota-proxy binary not found at %s", path)
+	}
+	cmd := exec.Command(path, fmt.Sprintf("--port=%d", port))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	// Inherit env so the proxy can reach api.anthropic.com
+	cmd.Env = os.Environ()
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	// Wait briefly for the proxy to start listening
+	for i := 0; i < 20; i++ {
+		time.Sleep(50 * time.Millisecond)
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port))
+		if err == nil {
+			resp.Body.Close()
+			return cmd, nil
+		}
+	}
+	return cmd, nil // started but health check timed out — return anyway
 }
 
 func isTerminal() bool {

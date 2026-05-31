@@ -47,16 +47,6 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			if missionStr != "" {
 				mission = &missionStr
 			}
-			ctxIDStr := getStringArg(args, "context_id", "")
-			var contextID *string
-			if ctxIDStr != "" {
-				contextID = &ctxIDStr
-			}
-			ctxNameStr := getStringArg(args, "context_name", "")
-			var contextName *string
-			if ctxNameStr != "" {
-				contextName = &ctxNameStr
-			}
 			envOverrides := getStringMapArg(args, "env_overrides")
 			envOverrides = stashMCPServers(args, envOverrides)
 
@@ -70,7 +60,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			name = autoPrefixSessionName(name, prefixModel, envOverrides)
 
 			profile := getStringArg(args, "profile", "")
-			return svc.RunTask(ctx, name, directory, contextID, contextName, mission, model, profile, taskBrief, envOverrides)
+			return svc.RunTask(ctx, name, directory, mission, model, profile, taskBrief, envOverrides)
 		},
 	)
 
@@ -137,16 +127,6 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			if missionStr != "" {
 				mission = &missionStr
 			}
-			ctxIDStr := getStringArg(args, "context_id", "")
-			var contextID *string
-			if ctxIDStr != "" {
-				contextID = &ctxIDStr
-			}
-			ctxNameStr := getStringArg(args, "context_name", "")
-			var contextName *string
-			if ctxNameStr != "" {
-				contextName = &ctxNameStr
-			}
 			envOverrides := getStringMapArg(args, "env_overrides")
 			envOverrides = stashMCPServers(args, envOverrides)
 
@@ -160,7 +140,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			name = autoPrefixSessionName(name, prefixModel, envOverrides)
 
 			profile := getStringArg(args, "profile", "")
-			return svc.SpawnAgent(ctx, name, repoPath, worktreePath, branch, contextID, contextName, mission, model, profile, taskBrief, envOverrides)
+			return svc.SpawnAgent(ctx, name, repoPath, worktreePath, branch, mission, model, profile, taskBrief, envOverrides)
 		},
 	)
 
@@ -649,7 +629,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				// to keep the system prompt under control.
 				sessionEnv = stashMCPServers(args, sessionEnv)
 				missionStr := goal
-				sess, err := svc.RunTask(ctx, name, matched.LocalPath, nil, nil, &missionStr, sessionModel, "", goal, sessionEnv)
+				sess, err := svc.RunTask(ctx, name, matched.LocalPath, &missionStr, sessionModel, "", goal, sessionEnv)
 				if err != nil {
 					return nil, fmt.Errorf("spawn session: %w", err)
 				}

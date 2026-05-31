@@ -13,7 +13,7 @@ import (
 // swarmClient is the interface the TUI uses to talk to the SwarmOps backend.
 // The concrete implementation is apiClient (HTTP). Tests use fakeSwarmClient.
 type swarmClient interface {
-	Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error)
+	Spawn(ctx context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error)
 	listSessions() ([]Session, error)
 	deleteSession(id string) error
 	renameSession(id, name string) error
@@ -24,6 +24,7 @@ type swarmClient interface {
 	updateSessionDirectory(id, directory string) error
 	listAuditEvents(limit int) ([]ManagedSessionEvent, error)
 	healthCheck() error
+	quota() (*QuotaData, error)
 }
 
 // apiClient is an HTTP client for the SwarmOps backend API.
@@ -41,13 +42,10 @@ func newAPIClient(baseURL string) *apiClient {
 }
 
 // Spawn implements the Spawner interface via the HTTP API.
-func (c *apiClient) Spawn(ctx context.Context, name, dir string, contextID, contextName, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
+func (c *apiClient) Spawn(ctx context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
 	body := map[string]interface{}{
 		"name":      name,
 		"directory": dir,
-	}
-	if contextID != nil {
-		body["context_id"] = *contextID
 	}
 	if mission != nil {
 		body["mission"] = *mission
@@ -249,4 +247,38 @@ func (c *apiClient) healthCheck() error {
 		return fmt.Errorf("backend returned %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// QuotaData represents the usage quota data from the Anthropic rate-limit headers.
+type QuotaData struct {
+	CapturedAt    int64       `json:"captured_at"`
+	OverallStatus string      `json:"overall_status"`
+	BindingWindow string      `json:"binding_window"`
+	Session5h     *WindowData `json:"session_5h,omitempty"`
+	Weekly7d      *WindowData `json:"weekly_7d,omitempty"`
+}
+
+// WindowData holds per-window utilization data.
+type WindowData struct {
+	Utilization float64 `json:"utilization"`
+	PercentLeft float64 `json:"percent_left"`
+	Status     string  `json:"status"`
+	ResetEpoch int64   `json:"reset_epoch"`
+}
+
+// quota fetches the current usage quota from the backend.
+func (c *apiClient) quota() (*QuotaData, error) {
+	resp, err := c.http.Get(c.baseURL + "/api/quota")
+	if err != nil {
+		return nil, fmt.Errorf("quota fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("quota endpoint returned %d", resp.StatusCode)
+	}
+	var q QuotaData
+	if err := json.NewDecoder(resp.Body).Decode(&q); err != nil {
+		return nil, fmt.Errorf("quota parse failed: %w", err)
+	}
+	return &q, nil
 }

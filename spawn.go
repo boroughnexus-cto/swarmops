@@ -235,7 +235,7 @@ func happierAvailable() bool {
 // worktreePath, gitBranch, and repoPath are optional; pass nil for plain sessions.
 // envOverrides injects extra environment variables into the tmux session via -e flags.
 // Pass nil to inherit the swarmops process environment unchanged (default behavior).
-func spawnSession(ctx context.Context, name, directory string, contextID, contextName, mission *string, model, profile string, worktreePath, gitBranch, repoPath *string, envOverrides map[string]string) (*Session, error) {
+func spawnSession(ctx context.Context, name, directory string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
 	// If the caller specified ANTHROPIC_MODEL via env_overrides but no
 	// explicit `model` arg, hoist it onto the session record. Without this,
 	// LiteLLM-routed sessions (spawned with env_overrides only) end up with
@@ -246,6 +246,20 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 		if m, ok := envOverrides["ANTHROPIC_MODEL"]; ok && m != "" {
 			model = m
 		}
+	}
+
+	// Default: route through the quota proxy on localhost:8082 to capture Anthropic
+	// rate-limit headers (session / weekly utilization). LiteLLM-routed sessions
+	// ([gpt]/[dseek] via litellmEnvOverrides) override this with the LiteLLM URL.
+	const quotaProxyURL = "http://localhost:8082"
+	if envOverrides == nil {
+		envOverrides = map[string]string{
+			"ANTHROPIC_BASE_URL": quotaProxyURL,
+		}
+	} else if _, hasBaseURL := envOverrides["ANTHROPIC_BASE_URL"]; !hasBaseURL {
+		// Profile-backed sessions (e.g. "deepseek"/"openai" profiles that don't
+		// explicitly set ANTHROPIC_BASE_URL) also route via proxy by default.
+		envOverrides["ANTHROPIC_BASE_URL"] = quotaProxyURL
 	}
 
 	// Pop the magic MCP-restrict key out of envOverrides so it never reaches
@@ -264,7 +278,7 @@ func spawnSession(ctx context.Context, name, directory string, contextID, contex
 		}
 	}
 
-	s, err := createSession(ctx, name, directory, contextID, contextName, mission, false, model, profile, worktreePath, gitBranch, repoPath)
+	s, err := createSession(ctx, name, directory, mission, false, model, profile)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}

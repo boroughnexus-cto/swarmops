@@ -1,0 +1,67 @@
+{
+	"/": [
+		"src/routes/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/agents": [
+		"src/routes/+layout.ts"
+	],
+	"/dev-server/[directoryId]": [
+		"src/routes/dev-server/[directoryId]/+page.ts",
+		"src/routes/+layout.ts"
+	],
+	"/directories": [
+		"src/routes/+layout.ts"
+	],
+	"/files": [
+		"src/routes/+layout.ts"
+	],
+	"/files/[directoryId]": [
+		"src/routes/files/[directoryId]/+page.js",
+		"src/routes/+layout.ts"
+	],
+	"/git/[directoryId]": [
+		"src/routes/git/[directoryId]/+page.js",
+		"src/routes/+layout.ts"
+	],
+	"/kanban": [
+		"src/routes/+layout.ts"
+	],
+	"/login": [
+		"src/routes/+layout.ts"
+	],
+	"/projects": [
+		"src/routes/+layout.ts"
+	],
+	"/projects/[id]": [
+		"src/routes/projects/[id]/+page.js",
+		"src/routes/+layout.ts"
+	],
+	"/settings": [
+		"src/routes/+layout.ts"
+	],
+	"/swarm": [
+		"src/routes/+layout.ts"
+	],
+	"/swarm/live": [
+		"src/routes/+layout.ts"
+	],
+	"/swarm/[session]": [
+		"src/routes/swarm/[session]/+page.js",
+		"src/routes/+layout.ts"
+	],
+	"/task-executions": [
+		"src/routes/+layout.ts"
+	],
+	"/task-executions/[id]": [
+		"src/routes/task-executions/[id]/+page.js",
+		"src/routes/+layout.ts"
+	],
+	"/terminal": [
+		"src/routes/+layout.ts"
+	],
+	"/terminal/[session]": [
+		"src/routes/terminal/[session]/+page.js",
+		"src/routes/+layout.ts"
+	]
+}

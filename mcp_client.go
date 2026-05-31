@@ -8,13 +8,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ─── MCP client for calling remote MCP servers from the TUI ─────────────────
-
-const contextMCPURL = "https://mcp-tkn-context.gate-hexatonic.ts.net/mcp"
 
 // mcpToolCall makes a JSON-RPC tools/call to an MCP server via streamable-http.
 // Returns the text content blocks from the tool result.
@@ -84,43 +80,4 @@ func mcpToolCall(serverURL, toolName string, args map[string]interface{}) ([]str
 		}
 	}
 	return texts, nil
-}
-
-// ─── Context fetching (uses mcpToolCall) ────────────────────────────────────
-
-// contextContentMsg is the result of fetching rendered context content.
-type contextContentMsg struct {
-	name    string
-	content string
-	err     error
-}
-
-func fetchContexts() tea.Cmd {
-	return func() tea.Msg {
-		result, err := mcpToolCall(contextMCPURL, "context_list", map[string]interface{}{"limit": 50})
-		if err != nil {
-			return contextListMsg(nil)
-		}
-		var items []contextItem
-		for _, block := range result {
-			var item contextItem
-			if json.Unmarshal([]byte(block), &item) == nil && item.Name != "" {
-				items = append(items, item)
-			}
-		}
-		return contextListMsg(items)
-	}
-}
-
-func fetchContextContent(name string) tea.Cmd {
-	return func() tea.Msg {
-		result, err := mcpToolCall(contextMCPURL, "context_render", map[string]interface{}{"name_or_id": name})
-		if err != nil {
-			return contextContentMsg{name: name, err: err}
-		}
-		if len(result) > 0 {
-			return contextContentMsg{name: name, content: result[0]}
-		}
-		return contextContentMsg{name: name, err: fmt.Errorf("empty response")}
-	}
 }
