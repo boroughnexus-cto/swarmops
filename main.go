@@ -38,6 +38,7 @@ func init() {
 }
 
 var database *sql.DB
+var BuildCommit string // set via -ldflags="-X main.BuildCommit=$(git rev-parse --short HEAD)"
 
 func main() {
 	// Subcommand routing
@@ -45,6 +46,9 @@ func main() {
 		switch os.Args[1] {
 		case "tui":
 			runTUIClient()
+			return
+		case "tui-restart":
+			runTUIRestart()
 			return
 		case "redeploy":
 			runRedeploy()
@@ -296,6 +300,25 @@ func runTUIClient() {
 		os.Exit(1)
 	}
 }
+
+// runTUIRestart kills all running swarmops tui processes and starts a fresh one.
+// Uses exec to replace the current process so the new TUI gets a clean terminal.
+func runTUIRestart() {
+	// Kill existing TUI processes (but not ourselves)
+	exec.Command("pkill", "-f", "swarmops tui").Run()
+	time.Sleep(500 * time.Millisecond)
+
+	// Find our own binary
+	exe, err := os.Executable()
+	if err != nil {
+		exe = "swarmops"
+	}
+
+	fmt.Printf("Starting fresh TUI...\n")
+	syscall.Exec(exe, []string{exe, "tui"}, os.Environ())
+	// syscall.Exec replaces the current process; we never return here
+}
+
 // runMCPStdioMode runs the MCP server over stdin/stdout (for Claude Code stdio transport).
 func runMCPStdioMode() {
 	database = initDatabase()

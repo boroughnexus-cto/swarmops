@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,12 +22,6 @@ import (
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 var (
-	sidebarStyle = lipgloss.NewStyle().
-			Width(24).
-			BorderRight(true).
-			BorderStyle(lipgloss.NormalBorder()).
-			Padding(1, 1)
-
 	selectedStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#15a8a8"))
@@ -60,6 +55,10 @@ var (
 )
 
 const headerHeight = 0 // top bar integrated into sidebar
+
+// sidebarWidth is the default (and adjustable) sidebar outer width in cells.
+// contentWidth = terminalWidth - (sidebarWidth + 2) where 2 = separator/border.
+const defaultSidebarWidth = 24
 
 // ─── Sidebar item: unified type for sessions + pool slots ────────────────────
 
@@ -196,6 +195,12 @@ type tuiModel struct {
 	// Terminal size
 	w, h int
 
+	// Last resize dimensions — guard against redundant tmux resize-window calls
+	resizeW, resizeH int
+
+	// Adjustable sidebar width (default 24, range 18–40)
+	sidebarWidth int
+
 	// Status message
 	flash string
 
@@ -298,6 +303,7 @@ func initialModel(api swarmClient) tuiModel {
 		restartingSessionIDs: make(map[string]bool),
 		spawner:              spawner,
 		api:                  api,
+		sidebarWidth:         24,
 	}
 }
 
@@ -537,10 +543,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.w = msg.Width
 		m.h = msg.Height
-		contentWidth := m.w - 26
+		contentWidth := m.w - (m.sidebarWidth + 2)
 		if contentWidth < 20 {
 			contentWidth = 20
 		}
+		// DEBUG: log EVERY resize event to trace width-flip and startup dims
+		log.Printf("[DEBUG] WindowSizeMsg: w=%d h=%d contentWidth=%d sidebarWidth=%d", m.w, m.h, contentWidth, m.sidebarWidth)
 		// Match sidebar: status line (2) + sidebar padding (2) + content header (2)
 		contentHeight := m.h - headerHeight - 2 - 2 - 2
 		if contentHeight < 5 {
@@ -649,7 +657,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateContentCache()
 		// Resize tmux sessions to match content pane on data refresh
 		if m.w > 0 {
-			contentWidth := m.w - 26
+			contentWidth := m.w - (m.sidebarWidth + 2)
 			if contentWidth < 20 {
 				contentWidth = 20
 			}
@@ -1005,7 +1013,32 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.vp.GotoBottom()
 			}
 			return m, nil
+		case "shift+alt+left":
+			if m.sidebarWidth > 18 {
+				m.sidebarWidth--
+				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
+			}
+			return m, nil
+		case "shift+alt+right":
+			if m.sidebarWidth < 40 {
+				m.sidebarWidth++
+				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
+			}
+			return m, nil
+		case "ctrl+[":
+			// DEBUG: dump sidebar render output to /tmp/sidebar-debug.txt
+			sidebarOut := m.renderSidebar()
+			lines := strings.Split(sidebarOut, "\n")
+			content := fmt.Sprintf("sidebarWidth=%d w=%d h=%d innerW=%d\nsidebar lines (%d):\n", m.sidebarWidth, m.w, m.h, m.sidebarInnerWidth(), len(lines))
+			for i, l := range lines {
+				content += fmt.Sprintf("  [%2d] (%3d chars) %q\n", i, len(l), l)
+			}
+			os.WriteFile("/tmp/sidebar-debug.txt", []byte(content), 0644)
+			m.flash = "Debug written to /tmp/sidebar-debug.txt"
+			return m, nil
 		default:
+			// DEBUG: log unknown keys to see what shift+alt+arrow produces
+			log.Printf("[DEBUG] handleKey unhandled: key=%s alt=%v", key, msg.Alt)
 			// Only pass keys to session items (not pool slots)
 			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
 				m.sendKeyToSession(key)
@@ -1534,13 +1567,27 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // sendKeyToSession translates a Bubbletea key string to tmux send-keys.
 // resizeTmuxSessions resizes all tmux session windows to match the TUI content pane.
+// Skips sessions with attached clients (client size takes precedence — resize is no-op
+// and would otherwise cause a SIGWINCH feedback loop that flickers the TUI width).
+// Also skips sessions whose dimensions haven't changed since the last call.
 func (m *tuiModel) resizeTmuxSessions(width, height int) {
-	for _, item := range m.items {
-		if item.kind == itemSession && item.tmuxSession != "" {
-			exec.Command("tmux", "resize-window", "-t", item.tmuxSession,
-				"-x", fmt.Sprintf("%d", width), "-y", fmt.Sprintf("%d", height)).Run()
-		}
+	if width == m.resizeW && height == m.resizeH {
+		return
 	}
+	log.Printf("[DEBUG] resizeTmuxSessions: w=%d h=%d (last=%d,%d)", width, height, m.resizeW, m.resizeH)
+	for _, item := range m.items {
+		if item.kind != itemSession || item.tmuxSession == "" {
+			continue
+		}
+		// Skip sessions with attached clients — client terminal size takes precedence
+		if out, err := exec.Command("tmux", "list-clients", "-t", item.tmuxSession).Output(); err == nil && len(out) > 0 {
+			continue
+		}
+		exec.Command("tmux", "resize-window", "-t", item.tmuxSession,
+			"-x", fmt.Sprintf("%d", width), "-y", fmt.Sprintf("%d", height)).Run()
+	}
+	m.resizeW = width
+	m.resizeH = height
 }
 
 func (m *tuiModel) sendKeyToSession(key string) {
@@ -1926,17 +1973,38 @@ func (m tuiModel) renderTopBar() string {
 	return topBarStyle.Width(barWidth).Render(content)
 }
 
+// sidebarStyle returns the sidebar lipgloss style with the current m.sidebarWidth.
+func (m tuiModel) sidebarStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Width(m.sidebarWidth).
+		BorderRight(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		Padding(1, 1)
+}
+
+// sidebarInnerWidth is the usable width inside the sidebar for content layout.
+func (m tuiModel) sidebarInnerWidth() int {
+	return m.sidebarWidth - 2 // subtract left+right padding
+}
+
 func (m tuiModel) renderSidebar() string {
 	var lines []string
 
-	// Top header: SwarmOps + time
-	ts := time.Now().Format("15:04:05")
-	titleLine := topBarTitleStyle.Render("SwarmOps")
-	gap := 22 - lipgloss.Width(titleLine) - len(ts) // 22 = sidebar inner width
-	if gap < 1 {
-		gap = 1
+	// DEBUG: log sidebar dimensions when h seems too small
+	if m.h < 20 {
+		log.Printf("[DEBUG] renderSidebar LOW h: w=%d h=%d sidebarWidth=%d innerW=%d", m.w, m.h, m.sidebarWidth, m.sidebarInnerWidth())
 	}
-	lines = append(lines, titleLine+strings.Repeat(" ", gap)+dimStyle.Render(ts))
+
+	// Top header: use plain ASCII to avoid lipgloss width mismatches with ANSI codes
+	// "SwarmOps" = 8, "HH:MM:SS" = 8, gap = 6 → "SwarmOps      10:49:21" (22 visible = innerW, fits in Width(24))
+	ts := time.Now().Format("15:04:05")
+	header := fmt.Sprintf("%-8s %8s", "SwarmOps", ts) // left-padded to match innerW=22
+	lines = append(lines, dimStyle.Render(header))
+	// Version line (only show if BuildCommit is populated)
+	if BuildCommit != "" {
+		versionLine := fmt.Sprintf("  %-20s", "v"+BuildCommit)
+		lines = append(lines, dimStyle.Render(versionLine))
+	}
 
 	// Summary line
 	running := 0
@@ -2046,7 +2114,7 @@ func (m tuiModel) renderSidebar() string {
 	if sideHeight < 3 {
 		sideHeight = 3
 	}
-	return sidebarStyle.Height(sideHeight).Render(strings.Join(lines, "\n"))
+	return m.sidebarStyle().Height(sideHeight).Render(strings.Join(lines, "\n"))
 }
 
 // updateContentCache computes the right-pane content string based on current state
@@ -2077,7 +2145,7 @@ func (m tuiModel) renderContent() string {
 	if !m.vpReady {
 		return ""
 	}
-	contentWidth := m.w - 26
+	contentWidth := m.w - (m.sidebarWidth + 2)
 	if contentWidth < 20 {
 		contentWidth = 20
 	}
@@ -2500,9 +2568,52 @@ func profilePickerFlash(idx int) string {
 }
 
 func runTUI(api swarmClient) error {
+	// If running inside tmux, swap the outer tmux's prefix to Ctrl+\ so
+	// Ctrl+b reaches the TUI instead of being intercepted by the outer tmux.
+	// RestoreOriginalPrefix is called on exit.
+	swapFn, restoreFn := swapNestedTmuxPrefix()
+	if swapFn != nil {
+		defer restoreFn()
+	}
+
 	p := tea.NewProgram(initialModel(api), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
+}
+
+// swapNestedTmuxPrefix swaps the outer tmux session's prefix key to Ctrl+\.
+// This lets the TUI receive Ctrl+b (and other prefix keys) when running
+// nested inside tmux. Returns (swapFn, restoreFn). swapFn is nil if not in tmux.
+// The restoreFn MUST be called on exit to restore the original prefix.
+func swapNestedTmuxPrefix() (func(), func()) {
+	tmuxEnv := os.Getenv("TMUX")
+	if tmuxEnv == "" {
+		return nil, func() {}
+	}
+
+	// Get the current session name
+	sessOut, err := exec.Command("tmux", "display-message", "-p", "#{session_name}").Output()
+	if err != nil {
+		return nil, func() {}
+	}
+	sess := strings.TrimSpace(string(sessOut))
+
+	// Get current prefix key
+	prefixOut, err := exec.Command("tmux", "show-options", "-t", sess, "prefix").Output()
+	if err != nil {
+		return nil, func() {}
+	}
+	// Output format: "prefix C-b" — extract the key
+	origPrefix := strings.TrimSpace(string(prefixOut))
+	origPrefix = strings.TrimPrefix(origPrefix, "prefix ")
+
+	// Change outer tmux prefix to Ctrl+\
+	exec.Command("tmux", "set-option", "-t", sess, "prefix", "C-\\").Run()
+
+	restore := func() {
+		exec.Command("tmux", "set-option", "-t", sess, "prefix", origPrefix).Run()
+	}
+	return func() {}, restore
 }
 
 // resumeClaudeCmd returns the command args for restarting a session.
