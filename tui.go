@@ -1002,6 +1002,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.sidebarWidth > 18 {
 				m.sidebarWidth--
 				saveSidebarWidth(m.sidebarWidth)
+				m.resizeTmuxSessions(m.w-(m.sidebarWidth+2), m.h)
 				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
 			}
 			return m, nil
@@ -1009,6 +1010,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.sidebarWidth < 40 {
 				m.sidebarWidth++
 				saveSidebarWidth(m.sidebarWidth)
+				m.resizeTmuxSessions(m.w-(m.sidebarWidth+2), m.h)
 				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
 			}
 			return m, nil
