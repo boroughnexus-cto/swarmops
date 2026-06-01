@@ -296,7 +296,7 @@ func initialModel(api swarmClient) tuiModel {
 		restartingSessionIDs: make(map[string]bool),
 		spawner:              spawner,
 		api:                  api,
-		sidebarWidth:         24,
+		sidebarWidth:         loadSidebarWidth(),
 	}
 }
 
@@ -991,15 +991,17 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.vp.GotoBottom()
 			}
 			return m, nil
-		case "shift+alt+left":
+		case "shift+alt+left", "alt+shift+left":
 			if m.sidebarWidth > 18 {
 				m.sidebarWidth--
+				saveSidebarWidth(m.sidebarWidth)
 				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
 			}
 			return m, nil
-		case "shift+alt+right":
+		case "shift+alt+right", "alt+shift+right":
 			if m.sidebarWidth < 40 {
 				m.sidebarWidth++
+				saveSidebarWidth(m.sidebarWidth)
 				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
 			}
 			return m, nil
@@ -2518,6 +2520,32 @@ func resumeClaudeCmd(claudeID, model string) []string {
 		args = append(args, "--model", model)
 	}
 	return args
+}
+
+func sidebarWidthPath() string {
+	return filepath.Join(os.Getenv("HOME"), ".swarmops", "sidebar-width")
+}
+
+func loadSidebarWidth() int {
+	path := sidebarWidthPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 40 // default to max width
+	}
+	w := 40
+	fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &w)
+	if w < 18 {
+		w = 18
+	}
+	if w > 40 {
+		w = 40
+	}
+	return w
+}
+
+func saveSidebarWidth(w int) {
+	os.MkdirAll(filepath.Dir(sidebarWidthPath()), 0755)
+	os.WriteFile(sidebarWidthPath(), []byte(fmt.Sprintf("%d", w)), 0644)
 }
 
 // breakLabelAtSlashes splits a session label at "/" separators so path-like names
