@@ -10423,3 +10423,18 @@ Already up to date.
   ⚠ tests failed — deploying anyway (was passing before pull)
   service restarted
   stamped .deployed-sha=0e7440d959efed2d9666a4faea87332ecad54cfa
+[Mon Jun  1 10:20:02 BST 2026] Deploying 0e7440d959efed2d9666a4faea87332ecad54cfa -> 498e1cd343546cd709e7144f2ad91e69216761d9
+  built 18536906 bytes
+  tests passed
+  service restarted
+  stamped .deployed-sha=498e1cd343546cd709e7144f2ad91e69216761d9
+[Mon Jun  1 10:40:01 BST 2026] Deploying 498e1cd343546cd709e7144f2ad91e69216761d9 -> 57fd4f35a4f390411a52361ac2aed7e7a0456bd4
+  built 18536872 bytes
+  tests passed
+  service restarted
+  stamped .deployed-sha=57fd4f35a4f390411a52361ac2aed7e7a0456bd4
+[Mon Jun  1 10:54:02 BST 2026] Deploying 57fd4f35a4f390411a52361ac2aed7e7a0456bd4 -> 4830e0a5d89764624fe17bd402c8a63e14916c2e
+  built 18697680 bytes
+  tests passed
+  service restarted
+  stamped .deployed-sha=4830e0a5d89764624fe17bd402c8a63e14916c2e

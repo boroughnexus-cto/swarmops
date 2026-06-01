@@ -2068,12 +2068,17 @@ func (m tuiModel) renderSidebar() string {
 	// Top header: use plain ASCII to avoid lipgloss width mismatches with ANSI codes
 	// "SwarmOps" = 8, "HH:MM:SS" = 8, gap = 6 → "SwarmOps      10:49:21" (22 visible = innerW, fits in Width(24))
 	ts := time.Now().Format("15:04:05")
-	header := fmt.Sprintf("%-8s %8s", "SwarmOps", ts) // left-padded to match innerW=22
-	lines = append(lines, dimStyle.Render(header))
+	title := topBarTitleStyle.Render("SwarmOps")
+	timeStr := lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Render(ts)
+	// No pad format — just render title then time with gap
+	gap := "   "
+	header := title + strings.Repeat(" ", lipgloss.Width(title)) + timeStr
+	_ = gap // unused but kept for readability
+	lines = append(lines, header)
 	// Version line (only show if BuildCommit is populated)
 	if BuildCommit != "" {
 		versionLine := fmt.Sprintf("  %-20s", "v"+BuildCommit)
-		lines = append(lines, dimStyle.Render(versionLine))
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Render(versionLine))
 	}
 
 	// Summary line
@@ -2106,30 +2111,6 @@ func (m tuiModel) renderSidebar() string {
 	lines = append(lines, dimStyle.Render(strings.Join(summary, " · ")))
 	lines = append(lines, dimStyle.Render("────────────────────"))
 
-	// Quota meters (from quota-proxy)
-	if m.quota != nil {
-		barW := m.sidebarInnerWidth() - 6 // leave room for label prefix "5h: "
-		if barW < 4 {
-			barW = 4
-		}
-		renderBar := func(label string, w *WindowData) string {
-			if w == nil {
-				return ""
-			}
-			filled := int(float64(barW) * w.Utilization)
-			if filled > barW {
-				filled = barW
-			}
-			bar := strings.Repeat("█", filled) + strings.Repeat("░", barW-filled)
-			return fmt.Sprintf("%s %s %d%%", label, bar, int(w.PercentLeft))
-		}
-		if line := renderBar("5h:", m.quota.Session5h); line != "" {
-			lines = append(lines, dimStyle.Render(line))
-		}
-		if line := renderBar("7d:", m.quota.Weekly7d); line != "" {
-			lines = append(lines, dimStyle.Render(line))
-		}
-	}
 
 	lines = append(lines, "")
 
@@ -2198,6 +2179,32 @@ func (m tuiModel) renderSidebar() string {
 			}
 		}
 	}
+
+	// Quota meters (from quota-proxy)
+	if m.quota != nil {
+		barW := m.sidebarInnerWidth() - 9 // leave room for label "5h: " + " 100%" suffix
+		if barW < 4 {
+			barW = 4
+		}
+		renderBar := func(label string, w *WindowData) string {
+			if w == nil {
+				return ""
+			}
+			filled := int(float64(barW) * w.Utilization)
+			if filled > barW {
+				filled = barW
+			}
+			bar := strings.Repeat("█", filled) + strings.Repeat("░", barW-filled)
+			return fmt.Sprintf("%s %s %d%%", label, bar, int(w.Utilization*100))
+		}
+		if line := renderBar("5h:", m.quota.Session5h); line != "" {
+			lines = append(lines, dimStyle.Render(line))
+		}
+		if line := renderBar("7d:", m.quota.Weekly7d); line != "" {
+			lines = append(lines, dimStyle.Render(line))
+		}
+	}
+
 
 	if len(m.items) == 0 {
 		lines = append(lines, dimStyle.Render(" (no sessions)"))
