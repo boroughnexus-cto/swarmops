@@ -134,6 +134,9 @@ const (
 	modeAuditLog
 	modeEditProfile // change profile and restart session
 	modeEditDir     // change working directory for a session
+	modeGoalPrompt  // smart session: enter goal text
+	modeGoalThinking // smart session: waiting for brain result
+	modeGoalConfirm  // smart session: confirm low-confidence pick
 )
 
 // Spawner abstracts session creation for testability.
@@ -165,6 +168,13 @@ type tuiModel struct {
 	// Edit profile / edit directory inputs
 	editProfileIdx int           // index in profileOptions slice
 	editDirInput   textinput.Model
+
+	// Smart session creation (modeGoalPrompt / modeGoalThinking / modeGoalConfirm)
+	goalInput        textinput.Model
+	goalGoal         string    // goal text being processed
+	goalPick         BrainPick // brain's routing decision
+	goalPickErr      string    // brain error (if any)
+	goalConfirmCursor int      // 0=Yes, 1=No in modeGoalConfirm
 
 	// Pool section display
 	poolExpanded bool // expanded in sidebar; default false (collapsed, SWM-49)
@@ -279,6 +289,10 @@ func initialModel(api swarmClient) tuiModel {
 	edi.Placeholder = "Working directory"
 	edi.CharLimit = 256
 
+	gi := textinput.New()
+	gi.Placeholder = "Describe what you want to achieve (1-3 sentences)..."
+	gi.CharLimit = 512
+
 	var spawner Spawner
 	if api != nil {
 		spawner = api
@@ -295,6 +309,7 @@ func initialModel(api swarmClient) tuiModel {
 		renameInput:     ri,
 		feedbackInput:   fi2,
 		editDirInput:    edi,
+		goalInput:       gi,
 		activityStates:       make(map[string]*activityState),
 		restartingSessionIDs: make(map[string]bool),
 		spawner:              spawner,
@@ -781,6 +796,38 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, flashClearCmd()
 
+	case goalBrainResultMsg:
+		if m.mode == modeGoalThinking {
+			if msg.err != "" {
+				m.mode = modePassthrough
+				m.flash = "Brain error: " + msg.err
+				return m, flashClearCmd()
+			}
+			pick := msg.pick
+			// High or medium confidence with a specific repo: auto-spawn
+			if pick.Pick != "" && pick.Pick != "none" && (pick.Confidence == "high" || pick.Confidence == "medium") {
+				m.goalPick = pick
+				m.flash = fmt.Sprintf("Brain: %s (%s) — spawning...", pick.Pick, pick.Confidence)
+				m.mode = modePassthrough
+				return m, tea.Batch(goalSpawnCmd(msg.goal, pick.Pick, m.api), loadItemsCmd(m.api), flashClearCmd())
+			}
+			// Low confidence or no pick: ask user
+			m.goalPick = pick
+			m.goalGoal = msg.goal
+			m.goalConfirmCursor = 0
+			m.mode = modeGoalConfirm
+			m.flash = ""
+		}
+		return m, nil
+
+	case goalSpawnDoneMsg:
+		if msg.err != "" {
+			m.flash = "Spawn error: " + msg.err
+		} else {
+			m.flash = fmt.Sprintf("Spawned %s", msg.sessionName)
+		}
+		return m, tea.Batch(loadItemsCmd(m.api), flashClearCmd())
+
 	case tea.MouseMsg:
 		if m.mode == modePassthrough && m.vpReady {
 			oldOffset := m.vp.YOffset
@@ -822,10 +869,10 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "alt+n":
-			m.mode = modeNewName
-			m.newNameInput.SetValue("")
-			m.newNameInput.Focus()
-			m.flash = "New session — enter name (esc to cancel)"
+			m.mode = modeGoalPrompt
+			m.goalInput.SetValue("")
+			m.goalInput.Focus()
+			m.flash = "Smart session — describe your goal (Enter to submit, Esc to cancel)"
 			return m, textinput.Blink
 		case "alt+d":
 			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
@@ -1331,6 +1378,61 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.editDirInput, cmd = m.editDirInput.Update(msg)
 			return m, cmd
+		}
+
+	case modeGoalPrompt:
+		switch key {
+		case "enter":
+			goal := m.goalInput.Value()
+			if goal != "" {
+				m.goalGoal = goal
+				m.mode = modeGoalThinking
+				m.flash = "Brain routing..."
+				return m, goalBrainCmd(goal, m.api)
+			}
+		case "esc":
+			m.mode = modePassthrough
+			m.flash = ""
+		default:
+			var cmd tea.Cmd
+			m.goalInput, cmd = m.goalInput.Update(msg)
+			return m, cmd
+		}
+
+	case modeGoalThinking:
+		if key == "esc" {
+			m.mode = modePassthrough
+			m.flash = ""
+		}
+
+	case modeGoalConfirm:
+		switch key {
+		case "y", "Y", "enter":
+			if key == "enter" && m.goalConfirmCursor != 0 {
+				// cursor on No
+				m.mode = modePassthrough
+				m.flash = "Cancelled"
+				return m, flashClearCmd()
+			}
+			slug := m.goalPick.Pick
+			if slug == "none" {
+				slug = ""
+			}
+			m.flash = "Spawning..."
+			m.mode = modePassthrough
+			return m, tea.Batch(goalSpawnCmd(m.goalGoal, slug, m.api), loadItemsCmd(m.api), flashClearCmd())
+		case "n", "N", "esc":
+			m.mode = modePassthrough
+			m.flash = "Cancelled"
+			return m, flashClearCmd()
+		case "alt+a", "up":
+			if m.goalConfirmCursor > 0 {
+				m.goalConfirmCursor--
+			}
+		case "alt+z", "down":
+			if m.goalConfirmCursor < 1 {
+				m.goalConfirmCursor++
+			}
 		}
 
 	case modeFeedbackType:
@@ -1861,6 +1963,13 @@ func (m tuiModel) View() string {
 		statusLine = profilePickerFlash(m.editProfileIdx)
 	case modeEditDir:
 		statusLine = "Dir: " + m.editDirInput.View()
+	case modeGoalPrompt:
+		statusLine = "Goal: " + m.goalInput.View() + dimStyle.Render("  (Enter to submit, Esc to cancel)")
+	case modeGoalThinking:
+		f := spinnerFrames[m.animFrame%len(spinnerFrames)]
+		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ff00")).Render(f) + " Brain routing...  " + dimStyle.Render("(Esc to cancel)")
+	case modeGoalConfirm:
+		statusLine = renderGoalConfirm(m)
 	case modeFeedbackType:
 		kinds := []string{"🐛 Bug", "✨ Feature"}
 		var parts []string
@@ -1878,7 +1987,7 @@ func (m tuiModel) View() string {
 		if m.flash != "" {
 			statusLine = dimStyle.Render(m.flash)
 		} else {
-			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+K profile │ Alt+G dir │ Alt+D delete") + "\n" +
+			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N smart-new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+K profile │ Alt+G dir │ Alt+D delete") + "\n" +
 				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+Q quit")
 		}
 	}
