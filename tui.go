@@ -97,6 +97,7 @@ type tickMsg time.Time         // fast animation tick (150ms)
 type dataTickMsg time.Time     // slow data refresh tick (2s)
 type activityTickMsg time.Time // activity detection tick (1s)
 type flashClearMsg struct{}    // auto-clear flash message
+type quotaMsg struct{ data *QuotaData }
 type sessionsMsg []Session
 type terminalMsg string
 type itemsMsg struct {
@@ -225,6 +226,9 @@ type tuiModel struct {
 
 	// Animation frame (cycles on tick)
 	animFrame int
+
+	// Quota/usage data from quota-proxy
+	quota *QuotaData
 
 	// Rename session
 	renameInput textinput.Model
@@ -355,6 +359,16 @@ type sessionCapture struct {
 // loadItemsCmd returns a tea.Cmd that builds the unified sidebar list.
 // Captures raw tmux pane content but does NOT classify activity (that happens in Update
 // via applyActivityClassification to avoid sharing the activityStates map with goroutines).
+func loadQuotaCmd(api swarmClient) tea.Cmd {
+	return func() tea.Msg {
+		if api == nil {
+			return quotaMsg{}
+		}
+		data, _ := api.quota()
+		return quotaMsg{data: data}
+	}
+}
+
 func loadItemsCmd(api swarmClient) tea.Cmd {
 	return func() tea.Msg {
 		var sessions []Session
@@ -600,8 +614,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case dataTickMsg:
-		// Slow tick (2s): HTTP data refresh (sessions, pool status)
-		return m, tea.Batch(dataTickCmd(), loadItemsCmd(m.api))
+		// Slow tick (2s): HTTP data refresh (sessions, pool status, quota)
+		return m, tea.Batch(dataTickCmd(), loadItemsCmd(m.api), loadQuotaCmd(m.api))
+
+	case quotaMsg:
+		m.quota = msg.data
+		return m, nil
 
 	case flashClearMsg:
 		m.flash = ""
@@ -1940,6 +1958,32 @@ func (m tuiModel) renderSidebar() string {
 	}
 	lines = append(lines, dimStyle.Render(strings.Join(summary, " · ")))
 	lines = append(lines, dimStyle.Render("────────────────────"))
+
+	// Quota meters (from quota-proxy)
+	if m.quota != nil {
+		barW := m.sidebarInnerWidth() - 6 // leave room for label prefix "5h: "
+		if barW < 4 {
+			barW = 4
+		}
+		renderBar := func(label string, w *WindowData) string {
+			if w == nil {
+				return ""
+			}
+			filled := int(float64(barW) * w.Utilization)
+			if filled > barW {
+				filled = barW
+			}
+			bar := strings.Repeat("█", filled) + strings.Repeat("░", barW-filled)
+			return fmt.Sprintf("%s %s %d%%", label, bar, int(w.PercentLeft))
+		}
+		if line := renderBar("5h:", m.quota.Session5h); line != "" {
+			lines = append(lines, dimStyle.Render(line))
+		}
+		if line := renderBar("7d:", m.quota.Weekly7d); line != "" {
+			lines = append(lines, dimStyle.Render(line))
+		}
+	}
+
 	lines = append(lines, "")
 
 	// Render session items
@@ -1948,10 +1992,7 @@ func (m tuiModel) renderSidebar() string {
 		if item.kind == itemPoolSlot {
 			continue // pool rendered separately below
 		}
-		label := item.label
-		if len(label) > 20 {
-			label = label[:17] + "..."
-		}
+		labelLines := breakLabelAtSlashes(item.label, m.sidebarInnerWidth())
 		ind := animatedIndicator(item.activity, m.animFrame)
 		// SWM-11: escalated indicator after 30s of awaiting_input
 		if item.activity == "awaiting_input" {
@@ -1960,10 +2001,15 @@ func (m tuiModel) renderSidebar() string {
 			}
 		}
 		if i == m.cursor {
-			line := fmt.Sprintf(" %s %s", ind, selectedLabelStyle.Render(label))
-			lines = append(lines, selectedStyle.Render("▸")+line)
+			lines = append(lines, selectedStyle.Render("▸")+fmt.Sprintf(" %s %s", ind, selectedLabelStyle.Render(labelLines[0])))
+			for _, l := range labelLines[1:] {
+				lines = append(lines, selectedStyle.Render("  ")+fmt.Sprintf("    %s", l))
+			}
 		} else {
-			lines = append(lines, fmt.Sprintf("  %s %s", ind, label))
+			lines = append(lines, fmt.Sprintf("  %s %s", ind, labelLines[0]))
+			for _, l := range labelLines[1:] {
+				lines = append(lines, fmt.Sprintf("    %s", l))
+			}
 		}
 	}
 
@@ -2472,4 +2518,35 @@ func resumeClaudeCmd(claudeID, model string) []string {
 		args = append(args, "--model", model)
 	}
 	return args
+}
+
+// breakLabelAtSlashes splits a session label at "/" separators so path-like names
+// (e.g. "agent/briefbox/phso-routing") render across multiple lines in the sidebar
+// instead of overflowing. Continuation lines are indented 4 spaces.
+func breakLabelAtSlashes(label string, innerW int) []string {
+	maxLen := innerW - 12 // indicator + space + padding
+	if maxLen < 4 {
+		maxLen = 4
+	}
+	if !strings.Contains(label, "/") {
+		if len(label) > maxLen {
+			label = label[:maxLen-3] + "..."
+		}
+		return []string{label}
+	}
+	parts := strings.Split(label, "/")
+	var lines []string
+	for i, part := range parts {
+		var line string
+		if i == len(parts)-1 {
+			line = part
+		} else {
+			line = part + "/"
+		}
+		if len(line) > maxLen {
+			line = line[:maxLen-3] + "..."
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }
