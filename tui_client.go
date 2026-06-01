@@ -25,6 +25,9 @@ type swarmClient interface {
 	listAuditEvents(limit int) ([]ManagedSessionEvent, error)
 	healthCheck() error
 	quota() (*QuotaData, error)
+	// TUI ↔ API state sharing for agentic integration and testing
+	pollTUIKey() (key string, hasKey bool)       // non-blocking GET /api/tui/key
+	pushTUIState(rendered string)                // async POST /api/tui/state
 }
 
 // apiClient is an HTTP client for the SwarmOps backend API.
@@ -281,4 +284,64 @@ func (c *apiClient) quota() (*QuotaData, error) {
 		return nil, fmt.Errorf("quota parse failed: %w", err)
 	}
 	return &q, nil
+}
+
+// pollTUIKey non-blocking-polls for a pending key from the API server.
+// Returns ("", false) if no key is queued.
+func (c *apiClient) pollTUIKey() (key string, hasKey bool) {
+	type keyResp struct{ Key string }
+	type emptyResp struct{}
+
+	req, err := http.NewRequest("GET", c.baseURL+"/api/tui/key", nil)
+	if err != nil {
+		return "", false
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Short timeout so polling doesn't stall the Update loop
+	client := &http.Client{Timeout: 100 * time.Millisecond}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 503 {
+		// TUI not connected yet
+		return "", false
+	}
+	if resp.StatusCode >= 400 {
+		return "", false
+	}
+	var kr keyResp
+	if err := json.NewDecoder(resp.Body).Decode(&kr); err != nil {
+		// Empty body is fine (no key queued)
+		return "", false
+	}
+	if kr.Key == "" {
+		return "", false
+	}
+	return kr.Key, true
+}
+
+// pushTUIState POSTs the rendered TUI output to the API server for exposure
+// via GET /api/tui/view and the swop_tui_state MCP tool. Runs asynchronously
+// so it never blocks the render cycle.
+func (c *apiClient) pushTUIState(rendered string) {
+	body, _ := json.Marshal(map[string]interface{}{
+		"rendered":  rendered,
+		"timestamp": time.Now().Unix(),
+	})
+	go func() {
+		req, err := http.NewRequest("POST", c.baseURL+"/api/tui/state", bytes.NewReader(body))
+		if err != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return
+		}
+		resp.Body.Close()
+	}()
 }

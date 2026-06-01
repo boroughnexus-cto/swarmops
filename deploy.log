@@ -10394,3 +10394,27 @@ fatal: unable to access 'https://github.com/boroughnexus-cto/swarmops.git/': Sen
   ⚠ tests failed — deploying anyway (was passing before pull)
   service restarted
   stamped .deployed-sha=ab11b5e1f4667b12800a5325fea471504252a2fe
+[Mon Jun  1 06:50:02 BST 2026] Deploying ab11b5e1f4667b12800a5325fea471504252a2fe -> d94f69a108c867b7b552af4cacdb429e7d2ef89e
+  built 18486173 bytes
+  ⚠ tests failed — deploying anyway (was passing before pull)
+  service restarted
+  stamped .deployed-sha=d94f69a108c867b7b552af4cacdb429e7d2ef89e
+[Mon Jun  1 06:54:03 BST 2026] Pulling 9ab1b8b962f93eb343c251e7f9ef93c5352151b7 -> d94f69a108c867b7b552af4cacdb429e7d2ef89e
+From https://github.com/boroughnexus-cto/swarmops
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+[Mon Jun  1 06:54:03 BST 2026] Deploying d94f69a108c867b7b552af4cacdb429e7d2ef89e -> 9ab1b8b962f93eb343c251e7f9ef93c5352151b7
+  built 18486173 bytes
+  ⚠ tests failed — deploying anyway (was passing before pull)
+  service restarted
+  stamped .deployed-sha=9ab1b8b962f93eb343c251e7f9ef93c5352151b7
+[Mon Jun  1 07:16:01 BST 2026] Deploying 9ab1b8b962f93eb343c251e7f9ef93c5352151b7 -> 26cf24439c4b43a2207620eb0b0e28961c364e17
+  built 18488723 bytes
+  tests passed
+  service restarted
+  stamped .deployed-sha=26cf24439c4b43a2207620eb0b0e28961c364e17
+[Mon Jun  1 07:30:01 BST 2026] Deploying 26cf24439c4b43a2207620eb0b0e28961c364e17 -> 2c8e574b282e5ec67f6b16650c0dbc4c21040662
+  built 18488043 bytes
+  tests passed
+  service restarted
+  stamped .deployed-sha=2c8e574b282e5ec67f6b16650c0dbc4c21040662

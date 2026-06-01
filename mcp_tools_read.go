@@ -307,6 +307,51 @@ func registerReadTools(reg *ToolRegistry, svc *Services) {
 		},
 	)
 
+	// ─── swop_tui_state ─────────────────────────────────────────────────
+	reg.Register(
+		ToolDefinition{
+			Name:        "swop_tui_state",
+			Description: "[READ] Get the current TUI state — rendered frame and key fields (sidebar width, mode, sessions). Requires the TUI to be running and pushing state to the server.",
+			InputSchema: jsonSchema(map[string]interface{}{}, nil),
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			tuiState.RLock()
+			rendered := tuiState.json
+			tuiState.RUnlock()
+			if rendered == "" {
+				return map[string]interface{}{
+					"error":  "TUI state not yet pushed — is the TUI running?",
+					"status": "unavailable",
+				}, nil
+			}
+			return map[string]interface{}{
+				"rendered": rendered,
+				"status":   "ok",
+			}, nil
+		},
+	)
+
+	// ─── swop_tui_send_key ──────────────────────────────────────────────
+	reg.Register(
+		ToolDefinition{
+			Name:        "swop_tui_send_key",
+			Description: "[WRITE] Send a key event to the live TUI (e.g. alt+shift+left, alt+shift+right, enter, q). The key is queued for the TUI to consume on its next poll cycle.",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"key": "string",
+			}, []string{"key"}),
+		},
+		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+			key, ok := args["key"].(string)
+			if !ok || key == "" {
+				return nil, fmt.Errorf("key field required")
+			}
+			pendingTUIKey.Lock()
+			pendingTUIKey.key = key
+			pendingTUIKey.Unlock()
+			return map[string]interface{}{"queued": key}, nil
+		},
+	)
+
 	// ─── pool_status (gated) ────────────────────────────────────────────
 	// Registered conditionally by registerWriteTools if pool tools enabled.
 	// We handle it here to keep read tools together.

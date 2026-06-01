@@ -544,6 +544,30 @@ func loadTerminal(tmuxName string) tea.Cmd {
 // ─── Update ──────────────────────────────────────────────────────────────────
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Non-blocking poll for externally queued keys (from swop_tui_send_key / POST /api/tui/key).
+	// Injects the key as a synthetic tea.KeyMsg into the current Update cycle.
+	// tea.KeyMsg.String() produces "alt+shift+left" from {Type: KeyShiftLeft, Alt: true}.
+	if m.api != nil {
+		if key, ok := m.api.pollTUIKey(); ok {
+			km := syntheticKeyMsg(key)
+			if km.Type != 0 {
+				updated, _ := m.handleKey(km)
+				if u, ok := updated.(tuiModel); ok {
+					m = u
+				}
+			}
+		}
+	}
+
+	// Push rendered state after every Update cycle (via defer so all return paths are covered).
+	// Capture api pointer at top; View() is called via closure at return time so it uses the final state.
+	api := m.api
+	defer func() {
+		if api != nil {
+			api.pushTUIState(m.View())
+		}
+	}()
+
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -2589,4 +2613,63 @@ func breakLabelAtSlashes(label string, innerW int) []string {
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+// syntheticKeyMsg converts a key string (e.g. "alt+shift+left", "enter", "q")
+// into a tea.KeyMsg that handleKey's switch on msg.String() can match.
+// Handles the common modifier combos used in the TUI keymap.
+// Returns tea.KeyMsg{Type: 0} for unrecognised keys.
+func syntheticKeyMsg(key string) tea.KeyMsg {
+	switch key {
+	case "alt+shift+left":
+		return tea.KeyMsg{Type: tea.KeyShiftLeft, Alt: true}
+	case "alt+shift+right":
+		return tea.KeyMsg{Type: tea.KeyShiftRight, Alt: true}
+	case "shift+alt+left":
+		return tea.KeyMsg{Type: tea.KeyShiftLeft, Alt: true}
+	case "shift+alt+right":
+		return tea.KeyMsg{Type: tea.KeyShiftRight, Alt: true}
+	case "shift+alt+up":
+		return tea.KeyMsg{Type: tea.KeyShiftUp, Alt: true}
+	case "shift+alt+down":
+		return tea.KeyMsg{Type: tea.KeyShiftDown, Alt: true}
+	case "shift+alt+tab":
+		return tea.KeyMsg{Type: tea.KeyShiftTab, Alt: true}
+	case "alt+left":
+		return tea.KeyMsg{Type: tea.KeyLeft, Alt: true}
+	case "alt+right":
+		return tea.KeyMsg{Type: tea.KeyRight, Alt: true}
+	case "shift+left":
+		return tea.KeyMsg{Type: tea.KeyShiftLeft}
+	case "shift+right":
+		return tea.KeyMsg{Type: tea.KeyShiftRight}
+	case "enter":
+		return tea.KeyMsg{Type: tea.KeyEnter}
+	case "tab":
+		return tea.KeyMsg{Type: tea.KeyTab}
+	case "shift+tab":
+		return tea.KeyMsg{Type: tea.KeyShiftTab}
+	case "escape", "esc":
+		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "ctrl+c":
+		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	case "ctrl+d":
+		return tea.KeyMsg{Type: tea.KeyCtrlD}
+	case "q":
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "down":
+		return tea.KeyMsg{Type: tea.KeyDown}
+	case "left":
+		return tea.KeyMsg{Type: tea.KeyLeft}
+	case "right":
+		return tea.KeyMsg{Type: tea.KeyRight}
+	default:
+		// Fallback: treat as a rune key
+		if len(key) == 1 {
+			return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+		}
+		return tea.KeyMsg{}
+	}
 }

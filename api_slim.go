@@ -8,7 +8,87 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 )
+
+// ─── TUI state sharing (TUI process → API server) ─────────────────────────────
+
+var tuiState struct {
+	sync.RWMutex
+	json string // latest rendered View() output
+}
+
+var pendingTUIKey struct {
+	sync.Mutex
+	key string // pending key to inject; "" = none
+}
+
+// TUIStateHandler accepts state POSTs from the TUI process and stores them.
+func handleTUIStateAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"POST only"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	var state struct {
+		Rendered  string `json:"rendered"`
+		State     string `json:"state"` // JSON snapshot of key fields
+		Timestamp int64  `json:"timestamp"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&state); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"bad json: %v"}`, err), http.StatusBadRequest)
+		return
+	}
+	tuiState.Lock()
+	tuiState.json = state.Rendered
+	tuiState.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleTUIKeyAPI handles both GET /tui/key (TUI polls) and POST /tui/key (external injects).
+func handleTUIKeyAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		pendingTUIKey.Lock()
+		k := pendingTUIKey.key
+		pendingTUIKey.key = "" // consume
+		pendingTUIKey.Unlock()
+		if k == "" {
+			w.Write([]byte(`{}`))
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"key": k})
+		return
+	}
+	if r.Method == "POST" {
+		var req struct{ Key string }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
+			http.Error(w, `{"error":"key field required"}`, http.StatusBadRequest)
+			return
+		}
+		pendingTUIKey.Lock()
+		pendingTUIKey.key = req.Key
+		pendingTUIKey.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Error(w, `{"error":"GET or POST only"}`, http.StatusMethodNotAllowed)
+}
+
+// TUIStateGet returns the latest TUI state snapshot (GET).
+func handleTUIStateGetAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, `{"error":"GET only"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	tuiState.RLock()
+	rendered := tuiState.json
+	tuiState.RUnlock()
+	if rendered == "" {
+		http.Error(w, `{"error":"TUI state not yet pushed — is the TUI running?"}`, http.StatusServiceUnavailable)
+		return
+	}
+	// Decode the stored state JSON to return it directly
+	json.NewEncoder(w).Encode(map[string]string{"rendered": rendered})
+}
 
 // handleAPI is the main REST API router. Maintains URL contract for the
 // tkn-swarmops MCP server wrapper (and the historical tkn-remote-code-*
@@ -52,6 +132,25 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleProjectsAPI(w, r)
 	case "swarm":
 		handleSwarmSubAPI(w, r, ctx, pathParts[1:])
+	case "tui":
+		// TUI state push: POST /api/tui/state
+		// TUI key poll/inject: GET|POST /api/tui/key
+		// TUI view snapshot: GET /api/tui/view
+		if len(pathParts) < 2 {
+			http.Error(w, `{"error":"tui endpoint required"}`, http.StatusBadRequest)
+			return
+		}
+		switch pathParts[1] {
+		case "state":
+			handleTUIStateAPI(w, r)
+		case "key":
+			handleTUIKeyAPI(w, r)
+		case "view":
+			handleTUIStateGetAPI(w, r)
+		default:
+			http.Error(w, `{"error":"tui/state, tui/key, or tui/view required"}`, http.StatusBadRequest)
+		}
+		return
 	default:
 		http.Error(w, `{"error":"unknown endpoint"}`, http.StatusNotFound)
 	}
