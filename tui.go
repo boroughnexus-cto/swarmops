@@ -304,7 +304,7 @@ func initialModel(api swarmClient) tuiModel {
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	return tea.Batch(tickCmd(), dataTickCmd(), activityTickCmd(), loadItemsCmd(m.api))
+	return tea.Batch(tickCmd(), dataTickCmd(), activityTickCmd(), loadItemsCmd(m.api), loadQuotaCmd(m.api))
 }
 
 func tickCmd() tea.Cmd {
