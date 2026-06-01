@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -363,6 +364,8 @@ func handleSwarmSubAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 		handleGlobalTasksAPI(w, r, ctx)
 	case "audit":
 		handleSwarmAuditAPI(w, r, ctx)
+	case "smart-spawn":
+		handleSmartSpawnAPI(w, r, ctx)
 	default:
 		http.Error(w, `{"error":"unknown swarm endpoint"}`, http.StatusNotFound)
 	}
@@ -562,6 +565,114 @@ func handleExternalEvents(w http.ResponseWriter, r *http.Request, ctx context.Co
 func handleSwarmDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Context) {
 	dashboard, _ := globalServices.SwarmDashboard(ctx)
 	json.NewEncoder(w).Encode(dashboard)
+}
+
+// handleSmartSpawnAPI handles POST /api/swarm/smart-spawn.
+// With dry_run=true it returns the brain's routing pick without spawning.
+// With dry_run=false (or repo_slug provided) it creates a worktree + session.
+func handleSmartSpawnAPI(w http.ResponseWriter, r *http.Request, ctx context.Context) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"POST only"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Goal     string `json:"goal"`
+		RepoSlug string `json:"repo_slug"`
+		DryRun   bool   `json:"dry_run"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"bad JSON"}`, http.StatusBadRequest)
+		return
+	}
+	if req.Goal == "" {
+		http.Error(w, `{"error":"goal required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if globalServices == nil {
+		http.Error(w, `{"error":"services not initialized"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	repos, err := listKnownRepos(ctx)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	rawReply, err := brainAsk(ctx, globalServices, brainDefaultModel, brainSystemPrompt, brainUserPrompt(req.Goal, repos))
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+	pick, err := brainParse(rawReply)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	result := smartSpawnResult{Pick: pick}
+
+	if req.DryRun {
+		json.NewEncoder(w).Encode(result)
+		return
+	}
+
+	// Determine which repo slug to use: explicit override, then brain's pick
+	repoSlug := req.RepoSlug
+	if repoSlug == "" {
+		repoSlug = pick.Pick
+	}
+
+	if repoSlug == "" || repoSlug == "none" {
+		// No matching repo: spawn a plain session in HOME
+		home, _ := os.UserHomeDir()
+		name := sanitizeSessionName(req.Goal)
+		mission := req.Goal
+		s, err := spawnSession(ctx, name, home, &mission, "", "", nil)
+		if err != nil {
+			result.Error = err.Error()
+		} else {
+			result.Session = s
+		}
+		json.NewEncoder(w).Encode(result)
+		return
+	}
+
+	// Find the repo in the registry
+	var targetRepo *KnownRepo
+	for i := range repos {
+		if repos[i].Slug() == repoSlug {
+			targetRepo = &repos[i]
+			break
+		}
+	}
+	if targetRepo == nil {
+		result.Error = fmt.Sprintf("repo not found in registry: %s", repoSlug)
+		json.NewEncoder(w).Encode(result)
+		return
+	}
+	if !targetRepo.IsCloned() {
+		result.Error = fmt.Sprintf("repo not cloned locally: %s", repoSlug)
+		json.NewEncoder(w).Encode(result)
+		return
+	}
+
+	// Spawn agent in a new worktree inside the repo
+	name := "smart-" + sanitizeSlug(req.Goal)
+	if len(name) > 30 {
+		name = name[:30]
+	}
+	mission := req.Goal
+	s, err := globalServices.SpawnAgent(ctx, name, targetRepo.LocalPath, "", "", &mission, "", "", req.Goal, nil)
+	if err != nil {
+		result.Error = err.Error()
+	} else {
+		result.Session = s
+	}
+
+	json.NewEncoder(w).Encode(result)
 }
 
 func init() {

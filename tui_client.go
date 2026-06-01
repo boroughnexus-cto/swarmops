@@ -25,6 +25,8 @@ type swarmClient interface {
 	listAuditEvents(limit int) ([]ManagedSessionEvent, error)
 	healthCheck() error
 	quota() (*QuotaData, error)
+	// Smart session creation: brain-routed spawn
+	smartSpawn(goal, repoSlug string, dryRun bool) (*smartSpawnResult, error)
 	// TUI ↔ API state sharing for agentic integration and testing
 	pollTUIKey() (key string, hasKey bool)       // non-blocking GET /api/tui/key
 	pushTUIState(rendered string)                // async POST /api/tui/state
@@ -284,6 +286,45 @@ func (c *apiClient) quota() (*QuotaData, error) {
 		return nil, fmt.Errorf("quota parse failed: %w", err)
 	}
 	return &q, nil
+}
+
+// smartSpawn calls POST /api/swarm/smart-spawn to route a goal to a repo and
+// optionally spawn a session. With dryRun=true it returns the brain's pick
+// without spawning; with dryRun=false it also creates the session.
+func (c *apiClient) smartSpawn(goal, repoSlug string, dryRun bool) (*smartSpawnResult, error) {
+	body, err := json.Marshal(map[string]interface{}{
+		"goal":      goal,
+		"repo_slug": repoSlug,
+		"dry_run":   dryRun,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+
+	// Brain calls can take a few seconds; use a longer timeout than the default 10s.
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest("POST", c.baseURL+"/api/swarm/smart-spawn", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result smartSpawnResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return &result, nil
 }
 
 // pollTUIKey non-blocking-polls for a pending key from the API server.

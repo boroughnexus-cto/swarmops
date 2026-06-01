@@ -170,24 +170,34 @@ func TestIntegration_IcingaPopup(t *testing.T) {
 }
 
 func TestIntegration_NewSessionFlow(t *testing.T) {
+	// alt+n now opens the smart goal prompt (modeGoalPrompt) instead of the manual wizard
 	m := newTestModel(nil)
 	updated, _ := m.Update(altKey('n'))
 	m = updated.(tuiModel)
-	if m.mode != modeNewName {
-		t.Fatalf("want modeNewName, got %d", m.mode)
+	if m.mode != modeGoalPrompt {
+		t.Fatalf("want modeGoalPrompt, got %d", m.mode)
 	}
+	// Esc should cancel and return to passthrough
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
 	m = updated.(tuiModel)
 	if m.mode != modePassthrough {
-		t.Error("esc should cancel")
+		t.Error("esc should cancel goal prompt")
 	}
+	// Re-open, type a goal, press Enter → should go to modeGoalThinking
 	updated, _ = m.Update(altKey('n'))
 	m = updated.(tuiModel)
-	m.newNameInput.SetValue("test-session")
+	// Simulate typing into the goal input by setting the value directly
+	m.goalInput.SetValue("add a dark mode toggle to the UI")
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(tuiModel)
-	if m.mode != modeNewDir {
-		t.Fatalf("want modeNewDir, got %d", m.mode)
+	if m.mode != modeGoalThinking {
+		t.Fatalf("want modeGoalThinking after goal submit, got %d", m.mode)
+	}
+	// Esc in thinking mode should cancel
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = updated.(tuiModel)
+	if m.mode != modePassthrough {
+		t.Error("esc should cancel brain thinking")
 	}
 }
 

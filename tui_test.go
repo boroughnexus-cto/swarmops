@@ -68,6 +68,8 @@ func newTestModel(items []sidebarItem) tuiModel {
 		popupFilter:     fi,
 		renameInput:     textinput.New(),
 		feedbackInput:   textinput.New(),
+		editDirInput:    textinput.New(),
+		goalInput:       textinput.New(),
 		activityStates:  make(map[string]*activityState),
 		spawner:         &mockSpawner{},
 		items:           items,
@@ -408,11 +410,11 @@ func TestKey_NewSessionMode(t *testing.T) {
 	m := newTestModel(nil)
 
 	m = sendSpecialKey(m, "alt+n")
-	if m.mode != modeNewName {
-		t.Errorf("alt+n should enter modeNewName, got %d", m.mode)
+	if m.mode != modeGoalPrompt {
+		t.Errorf("alt+n should enter modeGoalPrompt, got %d", m.mode)
 	}
 	if m.flash == "" {
-		t.Error("flash should show name prompt")
+		t.Error("flash should show goal prompt message")
 	}
 }
 
@@ -762,10 +764,10 @@ func TestSidebar_ShowsSessionsLabel(t *testing.T) {
 func TestKeyAudit_PassthroughAltKeysWork(t *testing.T) {
 	m := newTestModel(nil)
 
-	// Alt+N should enter new name mode, not be sent to tmux
+	// Alt+N should enter goal prompt mode, not be sent to tmux
 	m = sendSpecialKey(m, "alt+n")
-	if m.mode != modeNewName {
-		t.Errorf("alt+n should enter modeNewName, got %d", m.mode)
+	if m.mode != modeGoalPrompt {
+		t.Errorf("alt+n should enter modeGoalPrompt, got %d", m.mode)
 	}
 }
 
@@ -1165,6 +1167,9 @@ func (f *fakeSwarmClient) quota() (*QuotaData, error) {
 	return f.QuotaResp, nil
 }
 
+func (f *fakeSwarmClient) smartSpawn(goal, repoSlug string, dryRun bool) (*smartSpawnResult, error) {
+	return &smartSpawnResult{Pick: BrainPick{Pick: "none", Confidence: "low", Reasoning: "test stub"}}, nil
+}
 func (f *fakeSwarmClient) pollTUIKey() (string, bool) { return "", false }
 func (f *fakeSwarmClient) pushTUIState(string)        {}
 
@@ -1213,12 +1218,12 @@ func TestHandleKey_NewSession(t *testing.T) {
 	client := &fakeSwarmClient{}
 	m := newFakeModel(client, nil)
 
-	// alt+n opens new-session name input
+	// alt+n opens smart goal prompt
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("n")})
 	m = updated.(tuiModel)
 
-	if m.mode != modeNewName {
-		t.Errorf("expected modeNewName after alt+n, got %d", m.mode)
+	if m.mode != modeGoalPrompt {
+		t.Errorf("expected modeGoalPrompt after alt+n, got %d", m.mode)
 	}
 }
 
@@ -1404,64 +1409,58 @@ func TestHandleKey_EditMissionEsc(t *testing.T) {
 // ─── handleKey: new-session multi-step wizard ────────────────────────────────
 
 func TestHandleKey_NewSessionWizard_EscAtName(t *testing.T) {
+	// alt+n now enters modeGoalPrompt; esc should cancel back to passthrough
 	m := newFakeModel(nil, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("n")})
 	m = updated.(tuiModel)
-	if m.mode != modeNewName {
-		t.Fatalf("expected modeNewName, got %d", m.mode)
+	if m.mode != modeGoalPrompt {
+		t.Fatalf("expected modeGoalPrompt, got %d", m.mode)
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updated.(tuiModel)
 	if m.mode != modePassthrough {
-		t.Errorf("esc from modeNewName should return to modePassthrough, got %d", m.mode)
+		t.Errorf("esc from modeGoalPrompt should return to modePassthrough, got %d", m.mode)
 	}
 }
 
 func TestHandleKey_NewSessionWizard_EmptyNameNoAdvance(t *testing.T) {
+	// Entering an empty goal and pressing Enter should stay in modeGoalPrompt
 	m := newFakeModel(nil, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("n")})
 	m = updated.(tuiModel)
 
-	// Enter with empty name — should stay in modeNewName
+	// Enter with empty goal — should stay in modeGoalPrompt
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(tuiModel)
-	if m.mode != modeNewName {
-		t.Errorf("enter with empty name should stay in modeNewName, got %d", m.mode)
+	if m.mode != modeGoalPrompt {
+		t.Errorf("enter with empty goal should stay in modeGoalPrompt, got %d", m.mode)
 	}
 }
 
 func TestHandleKey_NewSessionWizard_NameToDir(t *testing.T) {
+	// Entering a goal and pressing Enter advances to modeGoalThinking (brain call)
 	m := newFakeModel(nil, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("n")})
 	m = updated.(tuiModel)
-	m.newNameInput.SetValue("my-session")
+	m.goalInput.SetValue("add dark mode to the app")
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(tuiModel)
-	if m.mode != modeNewDir {
-		t.Errorf("enter with name should advance to modeNewDir, got %d", m.mode)
+	if m.mode != modeGoalThinking {
+		t.Errorf("enter with goal should advance to modeGoalThinking, got %d", m.mode)
 	}
 }
 
 func TestHandleKey_NewSessionWizard_DirToMission(t *testing.T) {
+	// Direct test of modeNewDir → modeNewMission transition (mode still works, just not triggered by alt+n)
 	m := newFakeModel(nil, nil)
+	m.mode = modeNewDir
 
-	// Get to modeNewDir
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("n")})
-	m = updated.(tuiModel)
-	m.newNameInput.SetValue("my-session")
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(tuiModel)
-	if m.mode != modeNewDir {
-		t.Fatalf("expected modeNewDir, got %d", m.mode)
-	}
-
-	// Enter in modeNewDir advances to modeNewMission
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(tuiModel)
 	if m.mode != modeNewMission {
 		t.Errorf("enter in modeNewDir should advance to modeNewMission, got %d", m.mode)
@@ -1469,15 +1468,11 @@ func TestHandleKey_NewSessionWizard_DirToMission(t *testing.T) {
 }
 
 func TestHandleKey_NewSessionWizard_EscAtDir(t *testing.T) {
+	// Direct test of modeNewDir esc behavior (mode still works, just not triggered by alt+n)
 	m := newFakeModel(nil, nil)
+	m.mode = modeNewDir
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("n")})
-	m = updated.(tuiModel)
-	m.newNameInput.SetValue("my-session")
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(tuiModel)
-
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updated.(tuiModel)
 	if m.mode != modePassthrough {
 		t.Errorf("esc from modeNewDir should return to modePassthrough, got %d", m.mode)
@@ -1485,21 +1480,11 @@ func TestHandleKey_NewSessionWizard_EscAtDir(t *testing.T) {
 }
 
 func TestHandleKey_NewSessionWizard_MissionEsc(t *testing.T) {
+	// Direct test of modeNewMission esc behavior
 	m := newFakeModel(nil, nil)
+	m.mode = modeNewMission
 
-	// Advance to modeNewMission
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("n")})
-	m = updated.(tuiModel)
-	m.newNameInput.SetValue("my-session")
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(tuiModel)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(tuiModel)
-	if m.mode != modeNewMission {
-		t.Fatalf("expected modeNewMission, got %d", m.mode)
-	}
-
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updated.(tuiModel)
 	if m.mode != modePassthrough {
 		t.Errorf("esc from modeNewMission should return to modePassthrough, got %d", m.mode)
