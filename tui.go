@@ -973,13 +973,13 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.vp.GotoBottom()
 			}
 			return m, nil
-		case "shift+alt+left":
+		case "shift+alt+left", "alt+shift+left":
 			if m.sidebarWidth > 18 {
 				m.sidebarWidth--
 				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
 			}
 			return m, nil
-		case "shift+alt+right":
+		case "shift+alt+right", "alt+shift+right":
 			if m.sidebarWidth < 40 {
 				m.sidebarWidth++
 				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
