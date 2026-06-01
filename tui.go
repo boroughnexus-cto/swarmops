@@ -828,6 +828,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(loadItemsCmd(m.api), flashClearCmd())
 
+	case screenshotMsg:
+		if msg.err != nil {
+			m.flash = "Screenshot failed: " + msg.err.Error()
+		} else {
+			m.flash = "Screenshot saved: " + filepath.Base(msg.path)
+		}
+		return m, flashClearCmd()
+
 	case tea.MouseMsg:
 		if m.mode == modePassthrough && m.vpReady {
 			oldOffset := m.vp.YOffset
@@ -1085,6 +1093,9 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.flash = fmt.Sprintf("Sidebar: %d", m.sidebarWidth)
 			}
 			return m, nil
+		case "f12":
+			view := m.View()
+			return m, screenshotCmd(view)
 		case "ctrl+[":
 			// DEBUG: dump sidebar render output to /tmp/sidebar-debug.txt
 			sidebarOut := m.renderSidebar()
