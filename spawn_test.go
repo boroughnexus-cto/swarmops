@@ -26,6 +26,9 @@ func TestEffectiveModel(t *testing.T) {
 }
 
 func TestResumeClaudeCmdAlwaysPassesModel(t *testing.T) {
+	if !happierAvailable() {
+		t.Skip("happier not available in this environment")
+	}
 	t.Setenv("SWARMOPS_DEFAULT_MODEL", "")
 
 	// With happier available, model is passed via ANTHROPIC_MODEL env var

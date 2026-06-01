@@ -187,6 +187,9 @@ type tuiModel struct {
 
 	// Last resize dimensions — guard against redundant tmux resize-window calls
 	resizeW, resizeH int
+	// resizeDone is closed by resizeTmuxSessions when the goroutine finishes.
+	// Tests wait on this to avoid data races with the concurrent goroutine.
+	resizeDone chan struct{}
 
 	// Adjustable sidebar width (default 24, range 18–40)
 	sidebarWidth int
@@ -558,8 +561,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			contentHeight = 5
 		}
 		m.vp = viewport.New(contentWidth, contentHeight)
-		// Resize tmux sessions to viewport size (not including content header)
-		go m.resizeTmuxSessions(contentWidth, contentHeight)
+		// Resize tmux sessions to viewport size (not including content header).
+		// Called synchronously: tmux resize-window is fast (~10ms), and making it a
+		// goroutine caused a data race with the test's struct copy due to Go's stack-
+		// copying behaviour in race-detector builds.
+		m.resizeTmuxSessions(contentWidth, contentHeight)
 		m.vp.MouseWheelEnabled = true
 		m.vpReady = true
 		m.updateContentCache()
@@ -672,7 +678,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if contentHeight < 5 {
 				contentHeight = 5
 			}
-			go m.resizeTmuxSessions(contentWidth, contentHeight)
+			// Called synchronously: goroutine caused data races in tests (see line 571)
+			m.resizeTmuxSessions(contentWidth, contentHeight)
 		}
 		return m, nil
 
@@ -1517,6 +1524,9 @@ func (m *tuiModel) resizeTmuxSessions(width, height int) {
 	}
 	m.resizeW = width
 	m.resizeH = height
+	if m.resizeDone != nil {
+		close(m.resizeDone)
+	}
 }
 
 func (m *tuiModel) sendKeyToSession(key string) {
