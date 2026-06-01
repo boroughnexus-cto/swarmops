@@ -1169,6 +1169,7 @@ func (f *fakeSwarmClient) pollTUIKey() (string, bool) { return "", false }
 func (f *fakeSwarmClient) pushTUIState(string)        {}
 
 // newFakeModel returns a tuiModel wired to a fakeSwarmClient for key-handler testing.
+func newFakeModel(client *fakeSwarmClient, sessions []Session) tuiModel {
 	if client == nil {
 		client = &fakeSwarmClient{}
 	}
