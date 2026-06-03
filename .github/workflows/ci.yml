@@ -59,6 +59,12 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+      # The deploy step runs `make build`, so Go must be on PATH for this job —
+      # the self-hosted runner's job env does not include the Go SDK otherwise.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
       - name: Deploy the CI-validated commit to ~/swarmops
         env:
           DEPLOY_SHA: ${{ github.sha }} # pin to exactly the commit this run gated
