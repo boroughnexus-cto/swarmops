@@ -77,7 +77,7 @@ func newTestModel(items []sidebarItem) tuiModel {
 	}
 
 	// Initialize viewport
-	contentWidth := m.w - 26
+	contentWidth := m.w - m.sidebarContentOffset()
 	if contentWidth < 20 {
 		contentWidth = 20
 	}

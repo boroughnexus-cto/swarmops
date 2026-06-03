@@ -23,7 +23,6 @@ import (
 
 var (
 	sidebarStyle = lipgloss.NewStyle().
-			Width(24).
 			BorderRight(true).
 			BorderStyle(lipgloss.NormalBorder()).
 			Padding(1, 1)
@@ -542,7 +541,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mu.Lock()
 		m.w = msg.Width
 		m.h = msg.Height
-		contentWidth := m.w - 26
+		contentWidth := m.w - m.sidebarContentOffset()
 		if contentWidth < 20 {
 			contentWidth = 20
 		}
@@ -655,7 +654,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateContentCache()
 		// Resize tmux sessions to match content pane on data refresh
 		if m.w > 0 {
-			contentWidth := m.w - 26
+			contentWidth := m.w - m.sidebarContentOffset()
 			if contentWidth < 20 {
 				contentWidth = 20
 			}
@@ -1959,7 +1958,7 @@ func (m tuiModel) renderSidebar() string {
 	// Top header: SwarmOps + time
 	ts := time.Now().Format("15:04:05")
 	titleLine := topBarTitleStyle.Render("SwarmOps")
-	gap := 22 - lipgloss.Width(titleLine) - len(ts) // 22 = sidebar inner width
+	gap := m.sidebarInnerWidth() - lipgloss.Width(titleLine) - len(ts)
 	if gap < 1 {
 		gap = 1
 	}
@@ -1996,6 +1995,12 @@ func (m tuiModel) renderSidebar() string {
 	lines = append(lines, dimStyle.Render("────────────────────"))
 	lines = append(lines, "")
 
+	// prefix = "▸ ● " or "  ● " = 4 chars; max label = inner width - 4
+	maxLabel := m.sidebarInnerWidth() - 4
+	if maxLabel < 8 {
+		maxLabel = 8
+	}
+
 	// Render session items
 	now := time.Now().Unix()
 	for i, item := range m.items {
@@ -2003,8 +2008,8 @@ func (m tuiModel) renderSidebar() string {
 			continue // pool rendered separately below
 		}
 		label := item.label
-		if len(label) > 20 {
-			label = label[:17] + "..."
+		if len(label) > maxLabel {
+			label = label[:maxLabel-3] + "..."
 		}
 		ind := animatedIndicator(item.activity, m.animFrame)
 		// SWM-11: escalated indicator after 30s of awaiting_input
@@ -2047,8 +2052,8 @@ func (m tuiModel) renderSidebar() string {
 					continue
 				}
 				label := item.label
-				if len(label) > 20 {
-					label = label[:17] + "..."
+				if len(label) > maxLabel {
+					label = label[:maxLabel-3] + "..."
 				}
 				if i == m.cursor {
 					line := fmt.Sprintf(" %s %s %s", item.indicator, selectedLabelStyle.Render(label), dimStyle.Render(item.state))
@@ -2073,7 +2078,7 @@ func (m tuiModel) renderSidebar() string {
 	if sideHeight < 3 {
 		sideHeight = 3
 	}
-	return sidebarStyle.Height(sideHeight).Render(strings.Join(lines, "\n"))
+	return sidebarStyle.Width(m.sidebarStyleWidth()).Height(sideHeight).Render(strings.Join(lines, "\n"))
 }
 
 // updateContentCache computes the right-pane content string based on current state
@@ -2524,6 +2529,31 @@ func profilePickerFlash(idx int) string {
 		}
 	}
 	return "Profile: " + strings.Join(parts, " │ ") + "  (←/→ to pick, Enter to apply+restart, Esc to cancel)"
+}
+
+// sidebarStyleWidth returns the Width() value to pass to sidebarStyle.
+// It grows with terminal width above 100 cols so session names get more room.
+func (m tuiModel) sidebarStyleWidth() int {
+	w := 24
+	if m.w > 100 {
+		w += (m.w - 100) / 6
+	}
+	if w > 40 {
+		w = 40
+	}
+	return w
+}
+
+// sidebarInnerWidth is the usable horizontal content area inside the sidebar
+// (style Width minus horizontal padding of 2).
+func (m tuiModel) sidebarInnerWidth() int {
+	return m.sidebarStyleWidth() - 2
+}
+
+// sidebarContentOffset is how many terminal columns the sidebar block consumes,
+// used to compute the right-pane content width as m.w - sidebarContentOffset().
+func (m tuiModel) sidebarContentOffset() int {
+	return m.sidebarStyleWidth() + 2
 }
 
 func runTUI(api swarmClient) error {
