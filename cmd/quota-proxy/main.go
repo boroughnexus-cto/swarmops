@@ -117,7 +117,12 @@ func main() {
 	addr := fmt.Sprintf("localhost:%d", *port)
 	log.Printf("quota-proxy listening on %s → %s", addr, anthropicAPI)
 
-	srv := &http.Server{Addr: addr, Handler: mux, ReadTimeout: 60 * time.Second, WriteTimeout: 120 * time.Second}
+	// No ReadTimeout/WriteTimeout: this proxies Anthropic streaming responses,
+	// which can run for many minutes. A WriteTimeout severs the stream
+	// mid-response — the client sees "socket connection was closed
+	// unexpectedly" and every long Claude call fails. ReadHeaderTimeout guards
+	// against slow-header (slowloris) clients; IdleTimeout reaps idle keep-alives.
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
