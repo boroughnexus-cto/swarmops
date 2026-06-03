@@ -35,20 +35,20 @@ type planeIssue struct {
 }
 
 type icingaProblem struct {
-	Host          string
-	Service       string
-	State         int // 1=warning, 2=critical, 3=unknown
-	Output        string
-	FullOutput    string // untruncated plugin output
-	LastCheck     time.Time
-	Duration      time.Duration
-	CheckAttempt  int
-	MaxAttempts   int
-	Acknowledged  bool
-	AckAuthor     string
-	AckComment    string
-	InDowntime    bool
-	ObjectName    string // full object name for API calls (host!service)
+	Host         string
+	Service      string
+	State        int // 1=warning, 2=critical, 3=unknown
+	Output       string
+	FullOutput   string // untruncated plugin output
+	LastCheck    time.Time
+	Duration     time.Duration
+	CheckAttempt int
+	MaxAttempts  int
+	Acknowledged bool
+	AckAuthor    string
+	AckComment   string
+	InDowntime   bool
+	ObjectName   string // full object name for API calls (host!service)
 }
 
 // ─── Messages ───────────────────────────────────────────────────────────────
@@ -294,12 +294,12 @@ func fetchIcingaProblems(reqID uint64, api swarmClient) tea.Cmd {
 					LastCheckResult struct {
 						Output string `json:"output"`
 					} `json:"last_check_result"`
-					LastCheck          float64 `json:"last_check"`
-					LastStateChange    float64 `json:"last_state_change"`
-					CheckAttempt       float64 `json:"check_attempt"`
-					MaxCheckAttempts   float64 `json:"max_check_attempts"`
-					Acknowledgement    float64 `json:"acknowledgement"`
-					DowntimeDepth      float64 `json:"downtime_depth"`
+					LastCheck        float64 `json:"last_check"`
+					LastStateChange  float64 `json:"last_state_change"`
+					CheckAttempt     float64 `json:"check_attempt"`
+					MaxCheckAttempts float64 `json:"max_check_attempts"`
+					Acknowledgement  float64 `json:"acknowledgement"`
+					DowntimeDepth    float64 `json:"downtime_depth"`
 				} `json:"attrs"`
 			} `json:"results"`
 		}
@@ -525,9 +525,9 @@ func icingaScheduleDowntime(api swarmClient, objectName string, duration time.Du
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 var (
-	popupTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#15a8a8"))
+	popupTitleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#15a8a8"))
 	detailLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#15a8a8"))
-	stateColors     = map[int]lipgloss.Style{
+	stateColors      = map[int]lipgloss.Style{
 		1: lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcc00")), // warning/yellow
 		2: lipgloss.NewStyle().Foreground(lipgloss.Color("#ff3333")), // critical/red
 		3: lipgloss.NewStyle().Foreground(lipgloss.Color("#cc66ff")), // unknown/purple
@@ -1063,7 +1063,7 @@ func renderActionPicker(m tuiModel) string {
 	if len(target) > 60 {
 		target = target[:57] + "..."
 	}
-	sb.WriteString(popupTitleStyle.Render("Act on: "+target))
+	sb.WriteString(popupTitleStyle.Render("Act on: " + target))
 	sb.WriteString("\n\n")
 
 	if len(m.actionSessions) > 0 {

@@ -47,7 +47,7 @@ func TestResolveModel(t *testing.T) {
 		{"gpt-4", "claude-opus-4-6", true},
 		{"claude-haiku-4-5", "claude-haiku-4-5", true},
 		{"claude-sonnet-4-6", "claude-sonnet-4-6", true},
-		{"HAIKU", "claude-haiku-4-5", true},   // case insensitive
+		{"HAIKU", "claude-haiku-4-5", true},     // case insensitive
 		{" sonnet ", "claude-sonnet-4-6", true}, // trimmed
 		{"nonexistent", "", false},
 		{"", "", false},
@@ -118,9 +118,9 @@ func TestMapStopReason(t *testing.T) {
 
 func TestClassifyResultError(t *testing.T) {
 	tests := []struct {
-		name   string
-		event  poolEvent
-		want   string
+		name  string
+		event poolEvent
+		want  string
 	}{
 		{"not error", poolEvent{IsError: false}, ""},
 		{"auth failed", poolEvent{IsError: true, Result: "Not logged in · Please run /login"}, "disable"},
@@ -311,9 +311,9 @@ func TestSlotReadEvent_SkipsBlankAndNonJSON(t *testing.T) {
 	}
 
 	go func() {
-		fmt.Fprintln(w, "")                    // blank line
-		fmt.Fprintln(w, "not json")            // non-JSON
-		fmt.Fprintln(w, "  ")                  // whitespace
+		fmt.Fprintln(w, "")                                // blank line
+		fmt.Fprintln(w, "not json")                        // non-JSON
+		fmt.Fprintln(w, "  ")                              // whitespace
 		fmt.Fprintln(w, `{"type":"result","result":"ok"}`) // valid
 		w.Close()
 	}()

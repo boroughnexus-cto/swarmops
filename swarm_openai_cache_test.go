@@ -102,7 +102,7 @@ func TestBuildCachedContent_LargeHistory_AddsCacheControl(t *testing.T) {
 }
 
 func TestBuildCachedContent_LargeSystemAndHistory_TwoCacheBlocks(t *testing.T) {
-	largeSystem := strings.Repeat("System rules. ", 600)    // ~8400 chars
+	largeSystem := strings.Repeat("System rules. ", 600)  // ~8400 chars
 	largeAssist := strings.Repeat("Prior context. ", 600) // ~9000 chars
 	content, _ := buildCachedContent([]oaiMessage{
 		msg("system", largeSystem),

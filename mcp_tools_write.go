@@ -25,8 +25,8 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"profile":      stringProp("Optional happier backend profile (e.g. 'deepseek', 'openai', 'gemini'). Defaults to 'anthropic'. Takes effect on next restart if session already exists."),
 				"task_brief":   stringProp("Optional task brief written to TASK.md in the working directory before the agent starts."),
 				"env_overrides": map[string]interface{}{
-					"type":        "object",
-					"description": "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
+					"type":                 "object",
+					"description":          "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
 					"additionalProperties": map[string]interface{}{"type": "string"},
 				},
 				"mcp_servers": map[string]interface{}{
@@ -84,8 +84,8 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"model":         stringProp("Optional model name or alias (e.g. 'sonnet', 'opus'). Defaults to system setting."),
 				"profile":       stringProp("Optional happier backend profile (e.g. 'deepseek', 'openai', 'gemini'). Defaults to 'anthropic'."),
 				"env_overrides": map[string]interface{}{
-					"type":        "object",
-					"description": "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
+					"type":                 "object",
+					"description":          "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
 					"additionalProperties": map[string]interface{}{"type": "string"},
 				},
 				"mcp_servers": map[string]interface{}{
@@ -515,7 +515,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 					"description": "Optional subset of MCP server names to load in the spawned session. Recommended for backend='gpt'/'dseek' so the session boots with a tiny tool surface (~5k tokens) instead of the full ~50-server catalogue (~300k tokens). Example: ['tkn-plane','tkn-komodo','tkn-firecrawl'].",
 					"items":       map[string]interface{}{"type": "string"},
 				},
-				"dry_run":     map[string]interface{}{"type": "boolean", "description": "If true, return the brain's decision without spawning a session. Default false."},
+				"dry_run": map[string]interface{}{"type": "boolean", "description": "If true, return the brain's decision without spawning a session. Default false."},
 			}, []string{"goal"}),
 		},
 		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
@@ -800,14 +800,13 @@ func poolChatHandler(svc *Services) ToolHandler {
 		}
 
 		return map[string]interface{}{
-			"response":         text,
-			"model":            model,
-			"tokens_in":        tokensIn,
-			"tokens_out":       tokensOut,
-			"cost_usd":         resultEv.CostUSD,
-			"duration_ms":      resultEv.DurationMS,
-			"duration_api_ms":  resultEv.DurationAPIMS,
+			"response":        text,
+			"model":           model,
+			"tokens_in":       tokensIn,
+			"tokens_out":      tokensOut,
+			"cost_usd":        resultEv.CostUSD,
+			"duration_ms":     resultEv.DurationMS,
+			"duration_api_ms": resultEv.DurationAPIMS,
 		}, nil
 	}
 }
-

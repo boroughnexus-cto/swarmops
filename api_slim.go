@@ -513,7 +513,6 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 	}
 }
 
-
 // handleExternalEvents handles POST /api/swarm/sessions/:id/external-events.
 // Injects content into the session terminal. Requires Bearer token auth when
 // n8n.events_token is configured.

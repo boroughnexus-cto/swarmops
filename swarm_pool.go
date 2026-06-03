@@ -56,11 +56,11 @@ type poolEvent struct {
 	UUID      string          `json:"uuid,omitempty"`
 
 	// Fields from result events
-	DurationMS    int            `json:"duration_ms,omitempty"`
-	DurationAPIMS int            `json:"duration_api_ms,omitempty"`
-	NumTurns      int            `json:"num_turns,omitempty"`
-	StopReason    string         `json:"stop_reason,omitempty"`
-	Usage         *poolUsage     `json:"usage,omitempty"`
+	DurationMS    int        `json:"duration_ms,omitempty"`
+	DurationAPIMS int        `json:"duration_api_ms,omitempty"`
+	NumTurns      int        `json:"num_turns,omitempty"`
+	StopReason    string     `json:"stop_reason,omitempty"`
+	Usage         *poolUsage `json:"usage,omitempty"`
 }
 
 type poolUsage struct {
@@ -82,8 +82,8 @@ type poolContentBlock struct {
 
 // poolStreamDelta extracts text deltas from stream_event events.
 type poolStreamEvent struct {
-	Type  string          `json:"type"`
-	Delta *poolDelta      `json:"delta,omitempty"`
+	Type  string     `json:"type"`
+	Delta *poolDelta `json:"delta,omitempty"`
 }
 
 type poolDelta struct {
@@ -199,15 +199,15 @@ func (s *PoolSlot) kill() {
 
 // PoolConfig holds pool configuration resolved from ConfigService.
 type PoolConfig struct {
-	Models              []string
-	SlotsPerModel       int
-	SlotsPerModelOvr    map[string]int // model short name → slot count override
-	RequestTimeout      time.Duration
-	APIKey              string
-	MaxConsecErrs       int
-	IdleRecycleAge      time.Duration
-	BackoffBase         time.Duration
-	BackoffMax          time.Duration
+	Models           []string
+	SlotsPerModel    int
+	SlotsPerModelOvr map[string]int // model short name → slot count override
+	RequestTimeout   time.Duration
+	APIKey           string
+	MaxConsecErrs    int
+	IdleRecycleAge   time.Duration
+	BackoffBase      time.Duration
+	BackoffMax       time.Duration
 }
 
 // slotsForModel returns the slot count for a given model, respecting per-model overrides.
@@ -236,7 +236,7 @@ func DefaultPoolConfig() PoolConfig {
 
 // PoolManager manages a pool of warm Claude CLI sessions.
 type PoolManager struct {
-	slots     map[string][]*PoolSlot   // model → all slots
+	slots     map[string][]*PoolSlot    // model → all slots
 	available map[string]chan *PoolSlot // model → idle slot channel
 	config    PoolConfig
 	db        *sql.DB

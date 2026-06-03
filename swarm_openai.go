@@ -20,25 +20,25 @@ var heartbeatInterval = 15 * time.Second
 // ─── OpenAI-compatible types ─────────────────────────────────────────────────
 
 type oaiChatRequest struct {
-	Model       string         `json:"model"`
-	Messages    []oaiMessage   `json:"messages"`
-	Stream      bool           `json:"stream"`
-	MaxTokens   int            `json:"max_tokens,omitempty"`
-	Temperature *float64       `json:"temperature,omitempty"`
+	Model       string       `json:"model"`
+	Messages    []oaiMessage `json:"messages"`
+	Stream      bool         `json:"stream"`
+	MaxTokens   int          `json:"max_tokens,omitempty"`
+	Temperature *float64     `json:"temperature,omitempty"`
 }
 
 type oaiMessage struct {
-	Role    string `json:"role"`
+	Role    string          `json:"role"`
 	Content json.RawMessage `json:"content"`
 }
 
 type oaiChatResponse struct {
-	ID      string           `json:"id"`
-	Object  string           `json:"object"`
-	Created int64            `json:"created"`
-	Model   string           `json:"model"`
-	Choices []oaiChoice      `json:"choices"`
-	Usage   oaiUsage         `json:"usage"`
+	ID      string      `json:"id"`
+	Object  string      `json:"object"`
+	Created int64       `json:"created"`
+	Model   string      `json:"model"`
+	Choices []oaiChoice `json:"choices"`
+	Usage   oaiUsage    `json:"usage"`
 }
 
 type oaiChoice struct {
@@ -54,17 +54,17 @@ type oaiUsage struct {
 }
 
 type oaiChunk struct {
-	ID      string            `json:"id"`
-	Object  string            `json:"object"`
-	Created int64             `json:"created"`
-	Model   string            `json:"model"`
-	Choices []oaiChunkChoice  `json:"choices"`
+	ID      string           `json:"id"`
+	Object  string           `json:"object"`
+	Created int64            `json:"created"`
+	Model   string           `json:"model"`
+	Choices []oaiChunkChoice `json:"choices"`
 }
 
 type oaiChunkChoice struct {
-	Index        int            `json:"index"`
-	Delta        oaiDelta       `json:"delta"`
-	FinishReason *string        `json:"finish_reason"`
+	Index        int      `json:"index"`
+	Delta        oaiDelta `json:"delta"`
+	FinishReason *string  `json:"finish_reason"`
 }
 
 type oaiDelta struct {
@@ -102,10 +102,10 @@ type oaiErrorDetail struct {
 // inspecting modelUsage.contextWindow in result events) — not what Anthropic's
 // raw API may theoretically support.
 var modelContextLengths = map[string]int{
-	"claude-haiku-4-5":     200000,
-	"claude-sonnet-4-6":    200000,
-	"claude-opus-4-6":      200000,
-	"claude-opus-4-6[1m]":  1000000,
+	"claude-haiku-4-5":    200000,
+	"claude-sonnet-4-6":   200000,
+	"claude-opus-4-6":     200000,
+	"claude-opus-4-6[1m]": 1000000,
 }
 
 var modelAliases = map[string]string{

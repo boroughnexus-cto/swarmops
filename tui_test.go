@@ -30,10 +30,10 @@ type mockSpawner struct {
 }
 
 type spawnCall struct {
-	name, dir       string
-	mission         *string
-	model, profile  string
-	envOverrides    map[string]string
+	name, dir      string
+	mission        *string
+	model, profile string
+	envOverrides   map[string]string
 }
 
 func (m *mockSpawner) Spawn(_ context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
@@ -1569,4 +1569,3 @@ func TestHandleKey_FeedbackText_EmptyEnterCancels(t *testing.T) {
 		t.Errorf("empty feedback enter should return to modePassthrough, got %d", m.mode)
 	}
 }
-
