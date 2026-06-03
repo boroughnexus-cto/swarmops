@@ -4,12 +4,14 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 
 build:
 	go build -ldflags="-X main.BuildCommit=$(GIT_COMMIT)" -o swarmops .
+	go build -o quota-proxy ./cmd/quota-proxy
 
 dev:
 	go run .
 
 clean:
 	rm -f swarmops
+	rm -f quota-proxy
 	rm -f swarmops.db
 	rm -f swarmops-test*.db*
 

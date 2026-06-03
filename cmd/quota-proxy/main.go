@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	anthropicAPI  = "https://api.anthropic.com"
+	anthropicAPI = "https://api.anthropic.com"
 	headerPrefix = "anthropic-ratelimit-unified"
 )
 
@@ -175,13 +175,13 @@ func parseHeaders(h http.Header, statusCode int) {
 		BindingWindow: bindingWindow,
 		Session5h: &window{
 			Utilization: sessionUtil,
-			PercentLeft: math.Round((1-sessionUtil)*100),
+			PercentLeft: math.Round((1 - sessionUtil) * 100),
 			Status:      sessionStatus,
 			ResetEpoch:  sessionReset,
 		},
 		Weekly7d: &window{
 			Utilization: weeklyUtil,
-			PercentLeft: math.Round((1-weeklyUtil)*100),
+			PercentLeft: math.Round((1 - weeklyUtil) * 100),
 			Status:      weeklyStatus,
 			ResetEpoch:  weeklyReset,
 		},

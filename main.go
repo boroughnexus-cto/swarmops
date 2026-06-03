@@ -82,7 +82,6 @@ func main() {
 	// Start HTTP server BEFORE pool so health checks pass during pool startup
 	server := newHTTPServer()
 
-
 	// Bind the port first so we fail fast if it is already taken
 	ln, err := net.Listen("tcp", server.Addr)
 	if err != nil {
@@ -96,16 +95,12 @@ func main() {
 	}()
 	log.Printf("SwarmOps server listening on %s", server.Addr)
 
-	// Start the quota-proxy sidecar
-	const quotaProxyPort = 8082
+	// Start + supervise the quota-proxy sidecar. Sessions route their
+	// ANTHROPIC_BASE_URL through it (see spawn.go) to capture Anthropic
+	// rate-limit headers; the watchdog restarts it on crash. Tied to ctx, so
+	// shutdown (cancel) stops the child automatically.
 	exePath, _ := os.Executable()
-	quotaProxyPath := filepath.Join(filepath.Dir(exePath), "quota-proxy")
-	quotaProxy, err := startQuotaProxy(quotaProxyPath, quotaProxyPort)
-	if err != nil {
-		log.Printf("WARNING: could not start quota-proxy at %s: %v (continuing without usage tracking)", quotaProxyPath, err)
-	} else {
-		log.Printf("quota-proxy started on port %d (ANTHROPIC_BASE_URL=http://localhost:%d for sessions)", quotaProxyPort, quotaProxyPort)
-	}
+	superviseQuotaProxy(ctx, filepath.Join(filepath.Dir(exePath), "quota-proxy"), quotaProxyPort)
 
 	// Pool init is slow (spawns 6 Claude CLI sessions) — runs after HTTP is up
 	initPool(ctx)
@@ -158,14 +153,7 @@ func main() {
 		log.Printf("HTTP server error: %v", err)
 	}
 
-	cancel()
-
-	// Stop the quota-proxy sidecar
-	if quotaProxy != nil && quotaProxy.Process != nil {
-		quotaProxy.Process.Kill()
-		quotaProxy.Wait()
-		log.Printf("quota-proxy stopped")
-	}
+	cancel() // also signals superviseQuotaProxy to stop the sidecar
 
 	// Final scrollback save before shutdown
 	log.Printf("Saving session scrollbacks before shutdown...")
@@ -203,6 +191,7 @@ func runRedeploy() {
 	}{
 		{"Pulling latest", "git", []string{"pull", "--ff-only", "origin", "main"}},
 		{"Building", "go", []string{"build", "-o", "swarmops", "."}},
+		{"Building quota-proxy", "go", []string{"build", "-o", "quota-proxy", "./cmd/quota-proxy"}},
 		{"Running tests", "go", []string{"test", "./...", "-count=1", "-timeout=60s"}},
 		{"Restarting service", "systemctl", []string{"--user", "restart", "swarmops"}},
 	}
@@ -378,8 +367,7 @@ func newHTTPServer() *http.Server {
 
 	mux.HandleFunc("/api/", handleAPI)
 
-	// Quota proxy: transparently forward /api/quota → quota-proxy on QUOTA_PROXY_PORT
-	const quotaProxyPort = 8082
+	// Quota proxy: transparently forward /api/quota → quota-proxy on quotaProxyPort
 	mux.HandleFunc("/api/quota", func(w http.ResponseWriter, r *http.Request) {
 		proxyURL := fmt.Sprintf("http://localhost:%d/quota", quotaProxyPort)
 		req, _ := http.NewRequestWithContext(r.Context(), r.Method, proxyURL, r.Body)
@@ -419,37 +407,6 @@ func newHTTPServer() *http.Server {
 		Addr:    ":" + port, // Binds 0.0.0.0 — pool API used by Hermes over Tailscale
 		Handler: mux,
 	}
-}
-
-// startQuotaProxy starts the quota-proxy sidecar binary and returns the process.
-// The proxy listens on localhost:port and forwards requests to api.anthropic.com,
-// capturing anthropic-ratelimit-unified-* headers and exposing them at /quota.
-func startQuotaProxy(path string, port int) (*exec.Cmd, error) {
-	if path == "" {
-		path = "quota-proxy"
-	}
-	// Check if the binary exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, fmt.Errorf("quota-proxy binary not found at %s", path)
-	}
-	cmd := exec.Command(path, fmt.Sprintf("--port=%d", port))
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	// Inherit env so the proxy can reach api.anthropic.com
-	cmd.Env = os.Environ()
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	// Wait briefly for the proxy to start listening
-	for i := 0; i < 20; i++ {
-		time.Sleep(50 * time.Millisecond)
-		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port))
-		if err == nil {
-			resp.Body.Close()
-			return cmd, nil
-		}
-	}
-	return cmd, nil // started but health check timed out — return anyway
 }
 
 func isTerminal() bool {
