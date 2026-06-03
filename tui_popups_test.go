@@ -36,7 +36,7 @@ func TestView_PlaneIssues(t *testing.T) {
 	view := viewStripped(m)
 
 	assertContains(t, view, "Plane Issues")
-	assertContains(t, view, "Fix auth mid")  // truncated in split pane at 80 cols
+	assertContains(t, view, "Fix auth mid") // truncated in split pane at 80 cols
 	assertContains(t, view, "Add API rate")
 	assertContains(t, view, "Refactor models")
 	assertContains(t, view, "started")
@@ -675,7 +675,7 @@ func TestSort_IcingaBySeverity(t *testing.T) {
 func TestSort_IcingaByHost(t *testing.T) {
 	m := newTestModel(nil)
 	m.icingaProblems = fakeIcingaProblems() // backup-fire, unraid
-	m.popupSortMode = 2 // host
+	m.popupSortMode = 2                     // host
 
 	sorted := filteredIcingaProblems(m)
 	if sorted[0].Host != "backup-fire" {
@@ -1006,10 +1006,10 @@ func TestSortPlaneIssues_AllModes(t *testing.T) {
 		mode      int
 		firstWant string // expected Title of first element
 	}{
-		{0, "Zebra"},  // default: no sort, original order
-		{1, "Alpha"},  // priority: urgent first
-		{2, "Alpha"},  // state: started first
-		{3, "Alpha"},  // name: Alpha first
+		{0, "Zebra"}, // default: no sort, original order
+		{1, "Alpha"}, // priority: urgent first
+		{2, "Alpha"}, // state: started first
+		{3, "Alpha"}, // name: Alpha first
 	}
 
 	for _, tt := range tests {
@@ -1105,10 +1105,10 @@ func TestSortIcingaProblems_DoesNotMutateOriginal(t *testing.T) {
 
 func TestFilterPlane_EdgeCases(t *testing.T) {
 	tests := []struct {
-		name     string
-		issues   []planeIssue
-		query    string
-		wantLen  int
+		name    string
+		issues  []planeIssue
+		query   string
+		wantLen int
 	}{
 		{"nil issues", nil, "test", 0},
 		{"empty issues", []planeIssue{}, "test", 0},
@@ -1139,10 +1139,10 @@ func TestFilterPlane_EdgeCases(t *testing.T) {
 
 func TestFilterIcinga_EdgeCases(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		problems []icingaProblem
-		query   string
-		wantLen int
+		query    string
+		wantLen  int
 	}{
 		{"nil problems", nil, "test", 0},
 		{"empty problems", []icingaProblem{}, "test", 0},

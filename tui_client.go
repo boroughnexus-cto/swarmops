@@ -28,8 +28,8 @@ type swarmClient interface {
 	// Smart session creation: brain-routed spawn
 	smartSpawn(goal, repoSlug string, dryRun bool) (*smartSpawnResult, error)
 	// TUI ↔ API state sharing for agentic integration and testing
-	pollTUIKey() (key string, hasKey bool)       // non-blocking GET /api/tui/key
-	pushTUIState(rendered string)                // async POST /api/tui/state
+	pollTUIKey() (key string, hasKey bool) // non-blocking GET /api/tui/key
+	pushTUIState(rendered string)          // async POST /api/tui/state
 }
 
 // apiClient is an HTTP client for the SwarmOps backend API.
@@ -267,8 +267,8 @@ type QuotaData struct {
 type WindowData struct {
 	Utilization float64 `json:"utilization"`
 	PercentLeft float64 `json:"percent_left"`
-	Status     string  `json:"status"`
-	ResetEpoch int64   `json:"reset_epoch"`
+	Status      string  `json:"status"`
+	ResetEpoch  int64   `json:"reset_epoch"`
 }
 
 // quota fetches the current usage quota from the backend.

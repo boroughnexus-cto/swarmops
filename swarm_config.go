@@ -37,7 +37,7 @@ type configMeta struct {
 	Description string
 	DangerLevel int
 	Restartable bool
-	EnvVar      string            // e.g. "SWARM_MAX_AGENTS" — read as baseline if set
+	EnvVar      string             // e.g. "SWARM_MAX_AGENTS" — read as baseline if set
 	Validate    func(string) error // optional value validator; nil = accept anything
 }
 
@@ -115,10 +115,10 @@ var configRegistry = map[string]configMeta{
 	"pool.idle_recycle_min":  {Default: "30", EnvVar: "POOL_IDLE_RECYCLE_MIN", DangerLevel: 0, Description: "Recycle idle slots after N minutes", Validate: validatePositiveInt(5, 1440)},
 
 	// Plane integration (TUI popup)
-	"plane.api_url":    {Default: "", EnvVar: "PLANE_API_URL", DangerLevel: 0, Description: "Plane API base URL (e.g. http://100.74.34.7:8300)"},
-	"plane.api_key":    {Default: "", EnvVar: "PLANE_API_KEY", DangerLevel: 2, Description: "Plane API token"},
-	"plane.workspace":  {Default: "thomkernet", EnvVar: "PLANE_WORKSPACE", DangerLevel: 0, Description: "Plane workspace slug"},
-	"plane.project_id": {Default: "", EnvVar: "PLANE_PROJECT_ID", DangerLevel: 0, Description: "Plane project UUID for TUI popup"},
+	"plane.api_url":       {Default: "", EnvVar: "PLANE_API_URL", DangerLevel: 0, Description: "Plane API base URL (e.g. http://100.74.34.7:8300)"},
+	"plane.api_key":       {Default: "", EnvVar: "PLANE_API_KEY", DangerLevel: 2, Description: "Plane API token"},
+	"plane.workspace":     {Default: "thomkernet", EnvVar: "PLANE_WORKSPACE", DangerLevel: 0, Description: "Plane workspace slug"},
+	"plane.project_id":    {Default: "", EnvVar: "PLANE_PROJECT_ID", DangerLevel: 0, Description: "Plane project UUID for TUI popup"},
 	"feedback.project_id": {Default: "", EnvVar: "FEEDBACK_PROJECT_ID", DangerLevel: 0, Description: "Plane project UUID for feedback issues (SwarmOps)"},
 
 	// n8n integration

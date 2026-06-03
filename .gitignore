@@ -32,3 +32,8 @@ remote-code-test*.db*
 .worktrees/
 scratch/
 /quota-proxy
+/swarmops.tmp
+/quota-proxy.tmp
+/swarmops.prev
+/quota-proxy.prev
+/.deploy.lock

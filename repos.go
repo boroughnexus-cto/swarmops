@@ -22,7 +22,7 @@ type KnownRepo struct {
 	ID              int64  `json:"id"`
 	Owner           string `json:"owner"`
 	Name            string `json:"name"`
-	LocalPath       string `json:"local_path,omitempty"`        // empty if not cloned locally
+	LocalPath       string `json:"local_path,omitempty"` // empty if not cloned locally
 	DefaultBranch   string `json:"default_branch,omitempty"`
 	Description     string `json:"description,omitempty"`
 	ClaudeMDSummary string `json:"claude_md_summary,omitempty"`
@@ -133,8 +133,9 @@ func reposRefreshAll(ctx context.Context) (int, int, error) {
 }
 
 // githubURLRegex matches the owner/name parts of an https or ssh GitHub URL.
-//   https://github.com/owner/repo[.git]
-//   git@github.com:owner/repo[.git]
+//
+//	https://github.com/owner/repo[.git]
+//	git@github.com:owner/repo[.git]
 var githubURLRegex = regexp.MustCompile(`(?:github\.com[:/])([^/]+)/([^/]+?)(?:\.git)?$`)
 
 // discoverLocalRepos walks each configured root looking for .git directories,
@@ -306,9 +307,9 @@ func readClaudeMDSummary(path string) string {
 
 // ghRepoListItem matches the JSON shape returned by `gh repo list --json …`.
 type ghRepoListItem struct {
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	Owner             struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Owner       struct {
 		Login string `json:"login"`
 	} `json:"owner"`
 	DefaultBranchRef struct {

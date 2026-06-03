@@ -1,5 +1,6 @@
                         │dev-session  running                                                                              
- SwarmOps 00:00:00      │──────────────────────────────────────────────────────                                            
+ SwarmOps               │──────────────────────────────────────────────────────                                            
+ 00:00:00               │                                                                                                  
  1 sess · 2/2 pool      │                                                                                                  
  ────────────────────   │                                                                                                  
                         │                                                                                                  
@@ -21,6 +22,5 @@
                         │                                                                                                  
                         │                                                                                                  
                         │                                                                                                  
-                                                                                                                           
 Alt+A/Z nav │ Alt+N smart-new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+K profile │ Alt+G dir │ Alt+D delete 
 Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+Q quit

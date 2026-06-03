@@ -132,9 +132,9 @@ const (
 	modeFeedbackType
 	modeFeedbackText
 	modeAuditLog
-	modeEditProfile // change profile and restart session
-	modeEditDir     // change working directory for a session
-	modeGoalPrompt  // smart session: enter goal text
+	modeEditProfile  // change profile and restart session
+	modeEditDir      // change working directory for a session
+	modeGoalPrompt   // smart session: enter goal text
 	modeGoalThinking // smart session: waiting for brain result
 	modeGoalConfirm  // smart session: confirm low-confidence pick
 )
@@ -164,24 +164,24 @@ type tuiModel struct {
 	newNameInput    textinput.Model
 	newDirInput     textinput.Model
 	newMissionInput textinput.Model
-	newModel        int    // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
+	newModel        int // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
 	// Edit profile / edit directory inputs
-	editProfileIdx int           // index in profileOptions slice
+	editProfileIdx int // index in profileOptions slice
 	editDirInput   textinput.Model
 
 	// Smart session creation (modeGoalPrompt / modeGoalThinking / modeGoalConfirm)
-	goalInput        textinput.Model
-	goalGoal         string    // goal text being processed
-	goalPick         BrainPick // brain's routing decision
-	goalPickErr      string    // brain error (if any)
-	goalConfirmCursor int      // 0=Yes, 1=No in modeGoalConfirm
+	goalInput         textinput.Model
+	goalGoal          string    // goal text being processed
+	goalPick          BrainPick // brain's routing decision
+	goalPickErr       string    // brain error (if any)
+	goalConfirmCursor int       // 0=Yes, 1=No in modeGoalConfirm
 
 	// Pool section display
 	poolExpanded bool // expanded in sidebar; default false (collapsed, SWM-49)
 
 	// Per-session activity state for diff detection and 1-tick damper
-	activityStates    map[string]*activityState
-	activityInflight  bool // true while a captureActivityCmd is running
+	activityStates   map[string]*activityState
+	activityInflight bool // true while a captureActivityCmd is running
 
 	// Sessions currently undergoing a profile-switch restart (guards against concurrent restarts)
 	restartingSessionIDs map[string]bool
@@ -208,21 +208,21 @@ type tuiModel struct {
 	flash string
 
 	// Popup data
-	planeIssues    []planeIssue
-	icingaProblems []icingaProblem
-	auditEvents    []ManagedSessionEvent
+	planeIssues     []planeIssue
+	icingaProblems  []icingaProblem
+	auditEvents     []ManagedSessionEvent
 	auditScrollback string // scrollback for selected audit event's session
-	popupErr       string
-	popupCursor    int
-	planeReqID     uint64 // incremented on each fetch; stale responses ignored
-	icingaReqID    uint64
+	popupErr        string
+	popupCursor     int
+	planeReqID      uint64 // incremented on each fetch; stale responses ignored
+	icingaReqID     uint64
 
 	// Popup filter & sort
 	popupFilter       textinput.Model
 	popupFilterActive bool
-	popupSortMode     int  // 0=default, 1, 2 — meaning depends on popup type
-	popupTriageMode   int  // Plane triage preset: 0=all, 1=started, 2=high+urgent, 3=backlog
-	icingaGroupByHost bool // Icinga: group problems by host
+	popupSortMode     int               // 0=default, 1, 2 — meaning depends on popup type
+	popupTriageMode   int               // Plane triage preset: 0=all, 1=started, 2=high+urgent, 3=backlog
+	icingaGroupByHost bool              // Icinga: group problems by host
 	planeStates       map[string]string // state group → state ID for transitions
 
 	// Action picker (modePopupAction)
@@ -248,7 +248,7 @@ type tuiModel struct {
 
 	// Feedback submission
 	feedbackInput    textinput.Model
-	feedbackType     int // 0=bug, 1=feature
+	feedbackType     int     // 0=bug, 1=feature
 	feedbackSnapshot string  // TUI state captured at Alt+F press
 	feedbackPrevMode tuiMode // mode to return to after feedback cancel
 
@@ -301,15 +301,15 @@ func initialModel(api swarmClient) tuiModel {
 	}
 
 	return tuiModel{
-		mode:            modePassthrough,
-		newNameInput:    ni,
-		newDirInput:     di,
-		newMissionInput: mi,
-		popupFilter:     fi,
-		renameInput:     ri,
-		feedbackInput:   fi2,
-		editDirInput:    edi,
-		goalInput:       gi,
+		mode:                 modePassthrough,
+		newNameInput:         ni,
+		newDirInput:          di,
+		newMissionInput:      mi,
+		popupFilter:          fi,
+		renameInput:          ri,
+		feedbackInput:        fi2,
+		editDirInput:         edi,
+		goalInput:            gi,
 		activityStates:       make(map[string]*activityState),
 		restartingSessionIDs: make(map[string]bool),
 		spawner:              spawner,
@@ -420,18 +420,23 @@ func loadItemsCmd(api swarmClient) tea.Cmd {
 				mission = *s.Mission
 			}
 			items = append(items, sidebarItem{
-				kind:            itemSession,
-				label:           s.Name,
-				indicator:       indicator,
-				sessionID:       s.ID,
-				tmuxSession:     s.TmuxSession,
-				status:          s.Status,
-				activity:        activity,
-				mission:         mission,
-				model:           s.Model,
-				profile:         s.Profile,
-				directory:       s.Directory,
-				claudeSessionID: func() string { if s.ClaudeSessionID != nil { return *s.ClaudeSessionID }; return "" }(),
+				kind:        itemSession,
+				label:       s.Name,
+				indicator:   indicator,
+				sessionID:   s.ID,
+				tmuxSession: s.TmuxSession,
+				status:      s.Status,
+				activity:    activity,
+				mission:     mission,
+				model:       s.Model,
+				profile:     s.Profile,
+				directory:   s.Directory,
+				claudeSessionID: func() string {
+					if s.ClaudeSessionID != nil {
+						return *s.ClaudeSessionID
+					}
+					return ""
+				}(),
 			})
 		}
 
@@ -490,12 +495,12 @@ func loadItemsCmd(api swarmClient) tea.Cmd {
 								kind:      itemPoolSlot,
 								label:     fmt.Sprintf("[api] %s", short),
 								indicator: ind,
-								slotID:   sid,
-								model:    model,
-								state:    state,
-								requests: reqs,
-								costUSD:  cost,
-								alive:    alive,
+								slotID:    sid,
+								model:     model,
+								state:     state,
+								requests:  reqs,
+								costUSD:   cost,
+								alive:     alive,
 							})
 						}
 					}
@@ -1484,7 +1489,6 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-
 	case modePlaneIssues:
 		filtered := filteredPlaneIssues(m)
 		r := handlePopupKeyShared(&m, msg, len(filtered), planeSortLabels)
@@ -2122,7 +2126,6 @@ func (m tuiModel) renderSidebar() string {
 	lines = append(lines, dimStyle.Render(strings.Join(summary, " · ")))
 	lines = append(lines, dimStyle.Render("────────────────────"))
 
-
 	lines = append(lines, "")
 
 	// Render session items
@@ -2215,7 +2218,6 @@ func (m tuiModel) renderSidebar() string {
 			lines = append(lines, dimStyle.Render(line))
 		}
 	}
-
 
 	if len(m.items) == 0 {
 		lines = append(lines, dimStyle.Render(" (no sessions)"))
@@ -2492,7 +2494,6 @@ func classifyActivity(capture string, state *activityState) string {
 	return "idle"
 }
 
-
 // fnvHash computes a quick FNV-1a hash for change detection.
 func fnvHash(s string) uint64 {
 	h := uint64(14695981039346656037)
@@ -2521,6 +2522,7 @@ func animatedIndicator(activity string, frame int) string {
 		return statusStopped
 	}
 }
+
 // backendOption describes one entry in the unified model+profile picker.
 type backendOption struct {
 	label        string            // display name

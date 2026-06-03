@@ -169,115 +169,66 @@ func main() {
 	}
 }
 
-// runRedeploy pulls latest from git, rebuilds, restarts the backend service, then launches the TUI.
-func runRedeploy() {
-	dir, _ := os.Getwd()
-	// Find the swarmops source directory (where main.go lives)
-	srcDir := dir
-	if _, err := os.Stat(filepath.Join(dir, "main.go")); err != nil {
-		// Try the binary's directory
-		exe, _ := os.Executable()
-		srcDir = filepath.Dir(exe)
-		if _, err := os.Stat(filepath.Join(srcDir, "main.go")); err != nil {
-			fmt.Fprintf(os.Stderr, "Cannot find swarmops source directory\n")
-			os.Exit(1)
-		}
+// deployDirPath returns the canonical SwarmOps deploy checkout — the one place
+// production is built and run from. Override with SWARMOPS_DEPLOY_DIR.
+func deployDirPath() string {
+	if d := strings.TrimSpace(os.Getenv("SWARMOPS_DEPLOY_DIR")); d != "" {
+		return d
 	}
-
-	steps := []struct {
-		name string
-		cmd  string
-		args []string
-	}{
-		{"Pulling latest", "git", []string{"pull", "--ff-only", "origin", "main"}},
-		{"Building", "go", []string{"build", "-o", "swarmops", "."}},
-		{"Building quota-proxy", "go", []string{"build", "-o", "quota-proxy", "./cmd/quota-proxy"}},
-		{"Running tests", "go", []string{"test", "./...", "-count=1", "-timeout=60s"}},
-		{"Restarting service", "systemctl", []string{"--user", "restart", "swarmops"}},
-	}
-
-	for _, step := range steps {
-		// Before restarting the service, stop whatever holds port 8080
-		if step.name == "Restarting service" {
-			stopPortHolder()
-		}
-		fmt.Printf("  %s...", step.name)
-		cmd := exec.Command(step.cmd, step.args...)
-		cmd.Dir = srcDir
-		cmd.Env = os.Environ()
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			fmt.Printf(" FAILED\n")
-			fmt.Fprintf(os.Stderr, "%s\n", string(out))
-			if step.name == "Running tests" {
-				fmt.Printf("  (continuing despite test failure)\n")
-				continue
-			}
-			os.Exit(1)
-		}
-		fmt.Printf(" done\n")
-	}
-
-	// Wait for service to come up (pool spawns 6 Claude sessions — can take 60s+)
-	fmt.Printf("  Waiting for backend...")
-	ready := false
-	for i := 0; i < 120; i++ {
-		time.Sleep(500 * time.Millisecond)
-		resp, err := http.Get("http://localhost:8080/")
-		if err == nil {
-			resp.Body.Close()
-			fmt.Printf(" ready (%ds)\n\n", (i+1)/2)
-			ready = true
-			break
-		}
-		if i%10 == 9 {
-			fmt.Printf(".")
-		}
-	}
-	if !ready {
-		fmt.Printf(" timeout after 60s\n")
-		fmt.Fprintf(os.Stderr, "Check: journalctl --user -u swarmops -n 20\n")
-		os.Exit(1)
-	}
-
-	// Exec the NEW binary for TUI — the current process is the old binary
-	exe, err := filepath.Abs(filepath.Join(srcDir, "swarmops"))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot resolve binary path: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("  Launching TUI from %s\n", exe)
-	syscall.Exec(exe, []string{exe, "tui"}, os.Environ())
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "swarmops")
 }
 
-// stopPortHolder gracefully terminates processes listening on the SwarmOps port.
-func stopPortHolder() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+// deployScriptPath validates the deploy dir and returns the path to the single
+// canonical deploy script (scripts/deploy.sh) inside it. Pure/testable: side
+// effects limited to stat. Returns an error if the dir or script is missing.
+func deployScriptPath(deployDir string) (string, error) {
+	if strings.TrimSpace(deployDir) == "" {
+		return "", fmt.Errorf("deploy dir is empty")
 	}
-	out, err := exec.Command("fuser", port+"/tcp").Output()
-	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
-		return
+	if fi, err := os.Stat(deployDir); err != nil || !fi.IsDir() {
+		return "", fmt.Errorf("deploy dir %s not found", deployDir)
 	}
-	pids := strings.Fields(strings.TrimSpace(string(out)))
-	fmt.Printf("  Port %s held by PIDs %v — stopping...", port, pids)
-	for _, pid := range pids {
-		exec.Command("kill", pid).Run()
+	script := filepath.Join(deployDir, "scripts", "deploy.sh")
+	if _, err := os.Stat(script); err != nil {
+		return "", fmt.Errorf("deploy script %s not found (is the deploy dir a swarmops checkout?)", script)
 	}
-	for i := 0; i < 12; i++ {
-		time.Sleep(500 * time.Millisecond)
-		if exec.Command("fuser", port+"/tcp").Run() != nil {
-			fmt.Printf(" free\n")
-			return
+	return script, nil
+}
+
+// runRedeploy is the manual fallback for the GitHub Actions deploy job. It does
+// NOT build from the current working tree — it delegates to the one sanctioned
+// primitive (scripts/deploy.sh), which resets the deploy dir to origin/main,
+// rebuilds both binaries, restarts, health-checks, and rolls back on failure.
+// This guarantees `swarmops redeploy` can never ship a stale worktree build.
+// Pass --force to deploy over a dirty deploy tree. Launches the TUI on success.
+func runRedeploy() {
+	args := os.Args[2:] // pass-through flags (e.g. --force)
+	dir := deployDirPath()
+	script, err := deployScriptPath(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "redeploy: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("redeploy: deploying origin/main into %s via %s\n", dir, script)
+	cmd := exec.Command("bash", append([]string{script}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = os.Environ()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "redeploy: deploy failed: %v\n", err)
+		os.Exit(1)
+	}
+	exe := filepath.Join(dir, "swarmops")
+	if _, err := os.Stat(exe); err == nil {
+		fmt.Printf("redeploy: launching TUI from %s\n", exe)
+		if err := syscall.Exec(exe, []string{exe, "tui"}, os.Environ()); err != nil {
+			fmt.Fprintf(os.Stderr, "redeploy: exec %s: %v\n", exe, err)
+			os.Exit(1)
 		}
 	}
-	fmt.Printf(" forcing...")
-	for _, pid := range pids {
-		exec.Command("kill", "-9", pid).Run()
-	}
-	time.Sleep(time.Second)
-	fmt.Printf(" done\n")
 }
 
 // runTUIClient starts the TUI as an HTTP client against the backend.

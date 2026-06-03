@@ -65,11 +65,39 @@ Environment variables (`POOL_ENABLED`, `POOL_MODELS`, etc.) override defaults.
 ## Development
 
 ```bash
-make build    # Build binary
-make test     # Run tests
-make ci       # Full CI gate (vet + race tests)
-make clean    # Remove binary + test DBs
+make build      # Build both binaries (swarmops + quota-proxy), atomically
+make test       # Run tests
+make ci         # Merge gate: gofmt-check + vet + race tests
+make fmt        # gofmt the tree
+make clean      # Remove binaries + test DBs + deploy artifacts
 ```
+
+## Deployment
+
+There is exactly **one** way SwarmOps reaches production, and it is CI-gated.
+Do **not** build from a worktree and copy a binary into `~/swarmops` — that is
+how stale builds used to silently drop merged features.
+
+- **Canonical branch:** `main`. It is branch-protected: changes land only via PR
+  with the `ci` check green and the branch up to date. So `origin/main` is always
+  gated-green.
+- **The deploy primitive:** [`scripts/deploy.sh`](scripts/deploy.sh) is the sole
+  deploy path. It `flock`s, hard-resets `~/swarmops` to the target commit,
+  rebuilds both binaries atomically, restarts the service, health-checks, and
+  **rolls back** to the previous commit + binaries if the health check fails.
+- **Automatic:** on every push to `main`, the `deploy` job (GitHub Actions,
+  self-hosted `nuc-ubuntu-dev` runner) runs `scripts/deploy.sh` pinned to the
+  exact CI-validated commit (`DEPLOY_SHA=github.sha`).
+- **Manual fallback** (runner offline, or redeploy current `main`):
+
+  ```bash
+  swarmops redeploy            # delegates to scripts/deploy.sh (deploys origin/main)
+  swarmops redeploy --force    # also when ~/swarmops has uncommitted tracked edits
+  make deploy                  # equivalent
+  ```
+
+  `make restart` only rebuilds + restarts the *current checkout in place* — it
+  does not sync to `origin/main`, so it is for local iteration, not production.
 
 ## Architecture
 

@@ -16,18 +16,18 @@ import (
 
 // Session represents a managed Claude Code tmux session.
 type Session struct {
-	ID               string  `json:"id"`
-	Name             string  `json:"name"`
-	TmuxSession      string  `json:"tmux_session"`
-	Directory        string  `json:"directory"`
-	Mission          *string `json:"mission,omitempty"`
-	ClaudeSessionID  *string `json:"claude_session_id,omitempty"`
-	Model            string  `json:"model,omitempty"`    // "" = default claude model
-	Profile          string  `json:"profile,omitempty"` // happier --profile id; "" = anthropic (default)
-	Hidden           bool    `json:"hidden"`
-	Status           string  `json:"status"`
-	CreatedAt        int64   `json:"created_at"`
-	UpdatedAt        int64   `json:"updated_at"`
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	TmuxSession     string  `json:"tmux_session"`
+	Directory       string  `json:"directory"`
+	Mission         *string `json:"mission,omitempty"`
+	ClaudeSessionID *string `json:"claude_session_id,omitempty"`
+	Model           string  `json:"model,omitempty"`   // "" = default claude model
+	Profile         string  `json:"profile,omitempty"` // happier --profile id; "" = anthropic (default)
+	Hidden          bool    `json:"hidden"`
+	Status          string  `json:"status"`
+	CreatedAt       int64   `json:"created_at"`
+	UpdatedAt       int64   `json:"updated_at"`
 	// Agent worktree fields (nil for plain swop_run_task sessions).
 	WorktreePath *string `json:"worktree_path,omitempty"`
 	GitBranch    *string `json:"git_branch,omitempty"`
@@ -409,8 +409,7 @@ func compactWatcher(tmuxSession string, duration time.Duration) {
 		for _, line := range lines[start:] {
 			lower := strings.ToLower(strings.TrimSpace(line))
 			// Match Claude Code's compact prompt: contains "compact" + looks like a Y/n question
-			if strings.Contains(lower, "compact") && (
-				strings.Contains(lower, "y/n") ||
+			if strings.Contains(lower, "compact") && (strings.Contains(lower, "y/n") ||
 				strings.Contains(lower, "yes/no") ||
 				strings.Contains(lower, "would you like") ||
 				strings.Contains(lower, "continue without") ||
