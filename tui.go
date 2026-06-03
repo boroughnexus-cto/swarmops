@@ -237,6 +237,11 @@ type tuiModel struct {
 	// Scroll state
 	userScrolled bool
 
+	// mouseOn tracks whether app mouse capture is active. Toggled with Alt+X so
+	// the user can drop app capture and select/copy text natively in the right
+	// pane (terminals suppress native selection while an app grabs the mouse).
+	mouseOn bool
+
 	// Animation frame (cycles on tick)
 	animFrame int
 
@@ -315,6 +320,7 @@ func initialModel(api swarmClient) tuiModel {
 		spawner:              spawner,
 		api:                  api,
 		sidebarWidth:         loadSidebarWidth(),
+		mouseOn:              true, // matches tea.WithMouseCellMotion in runTUI
 	}
 }
 
@@ -881,6 +887,17 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.updateContentCache()
 			}
 			return m, nil
+		case "alt+x":
+			// Toggle app mouse capture so right-pane text can be selected/copied
+			// natively — terminals suppress drag-selection while an app grabs the
+			// mouse. Off → native drag-select; On → wheel scroll.
+			m.mouseOn = !m.mouseOn
+			if m.mouseOn {
+				m.flash = "Mouse ON — wheel scrolls (Alt+X to select/copy text)"
+				return m, tea.EnableMouseCellMotion
+			}
+			m.flash = "Mouse OFF — drag to select/copy text; Alt+X to re-enable"
+			return m, tea.DisableMouse
 		case "alt+n":
 			m.mode = modeGoalPrompt
 			m.goalInput.SetValue("")
@@ -2003,7 +2020,7 @@ func (m tuiModel) View() string {
 			statusLine = dimStyle.Render(m.flash)
 		} else {
 			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N smart-new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+K profile │ Alt+G dir │ Alt+D delete") + "\n" +
-				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+Q quit")
+				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+X copy │ Alt+Q quit")
 		}
 	}
 

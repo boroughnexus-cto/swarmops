@@ -76,6 +76,7 @@ func newTestModel(items []sidebarItem) tuiModel {
 		w:               testWidth,
 		h:               testHeight,
 		sidebarWidth:    24,
+		mouseOn:         true,
 	}
 
 	// Initialize viewport
@@ -1567,5 +1568,20 @@ func TestHandleKey_FeedbackText_EmptyEnterCancels(t *testing.T) {
 	m = updated.(tuiModel)
 	if m.mode != modePassthrough {
 		t.Errorf("empty feedback enter should return to modePassthrough, got %d", m.mode)
+	}
+}
+
+func TestMouseToggleAltX(t *testing.T) {
+	m := newTestModel(nil)
+	if !m.mouseOn {
+		t.Fatal("mouse should start enabled (matches WithMouseCellMotion)")
+	}
+	m = sendSpecialKey(m, "alt+x")
+	if m.mouseOn {
+		t.Error("alt+x should disable app mouse capture (for native text selection)")
+	}
+	m = sendSpecialKey(m, "alt+x")
+	if !m.mouseOn {
+		t.Error("alt+x should re-enable mouse capture")
 	}
 }
