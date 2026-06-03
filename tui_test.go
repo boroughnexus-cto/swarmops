@@ -971,7 +971,10 @@ func TestKeyAudit_RegularKeysInPassthroughGoToTmux(t *testing.T) {
 
 // ─── Mouse handling test ────────────────────────────────────────────────────
 
-func TestMouse_ViewportHandlesMouseInPassthrough(t *testing.T) {
+// Mouse cell motion mode is enabled for scroll wheel support.
+// To select text for copy-paste, hold Shift while dragging (bypasses app mouse mode).
+
+func TestMouse_IgnoredInPassthrough(t *testing.T) {
 	m := newTestModel(nil)
 
 	// Send a mouse wheel event — should not panic or change mode

@@ -1004,6 +1004,27 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+		case "alt+u":
+			// Scroll viewport up one page
+			if m.vpReady {
+				oldOffset := m.vp.YOffset
+				m.vp.ViewUp()
+				if m.vp.YOffset != oldOffset {
+					m.userScrolled = true
+				}
+			}
+			return m, nil
+		case "alt+j":
+			// Scroll viewport down one page
+			if m.vpReady {
+				m.vp.ViewDown()
+				if m.vp.AtBottom() {
+					m.userScrolled = false
+				} else {
+					m.userScrolled = true
+				}
+			}
+			return m, nil
 		case "alt+b":
 			// Snap viewport to bottom and resume auto-scroll
 			if m.vpReady {
@@ -1877,7 +1898,7 @@ func (m tuiModel) View() string {
 			statusLine = dimStyle.Render(m.flash)
 		} else {
 			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+K profile │ Alt+G dir │ Alt+D delete") + "\n" +
-				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+Q quit")
+				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+Q quit │ scroll:wheel/Alt+U+J │ copy:Shift+drag")
 		}
 	}
 
