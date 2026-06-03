@@ -4,7 +4,17 @@ on:
     branches: [main, rework/**]
   pull_request:
     branches: [main]
+
+# Cancel superseded gate runs for the same PR ref; never auto-cancel on main
+# (so a deploy-triggering push is not cut off mid-flight).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # ci is the merge gate. `main` is protected to require this check before merge,
+  # so origin/main is always green — which is what makes `reset --hard
+  # origin/main` in scripts/deploy.sh safe to ship unconditionally.
   ci:
     runs-on: ubuntu-latest
     env:
@@ -23,7 +33,12 @@ jobs:
         # continue-on-error: pre-existing errcheck debt across api.go/swarm.go;
         # remove once the codebase is lint-clean.
         continue-on-error: true
-      - run: make ci
+      - name: gofmt + vet + race tests
+        run: make ci
+      - name: Build both binaries
+        run: make build
+      - name: Deploy script is valid bash
+        run: bash -n scripts/deploy.sh
       - name: Verify golden files are up to date
         env:
           UPDATE_GOLDEN: ""
@@ -31,15 +46,20 @@ jobs:
           go test -run "TestView_Empty|TestView_Sessions|TestView_PoolSlots" -count=1 ./...
           git diff --exit-code testdata/
 
+  # deploy is the ONLY production deploy path. It runs scripts/deploy.sh on the
+  # self-hosted runner, which resets ~/swarmops to origin/main, rebuilds both
+  # binaries, restarts, health-checks, and rolls back on failure. Fires only
+  # after the ci gate is green and only on a push to main (never on PRs/forks).
   deploy:
     needs: ci
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: [self-hosted, nuc-ubuntu-dev]
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
-      - name: Build and restart swarmops
-        run: make restart
+      - name: Deploy the CI-validated commit to ~/swarmops
+        env:
+          DEPLOY_SHA: ${{ github.sha }} # pin to exactly the commit this run gated
+        run: bash scripts/deploy.sh
