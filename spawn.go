@@ -72,8 +72,7 @@ func remoteControlArgs(name string) []string {
 // An optional model string selects the claude model.
 // envOverrides injects extra environment variables into the tmux session via -e flags.
 // Pass nil to inherit the swarmops process environment unchanged (default behavior).
-// (profile is retained on the session record for backward compat but unused.)
-func spawnSession(ctx context.Context, name, directory string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
+func spawnSession(ctx context.Context, name, directory string, mission *string, model string, envOverrides map[string]string) (*Session, error) {
 	// If the caller specified ANTHROPIC_MODEL via env_overrides but no
 	// explicit `model` arg, hoist it onto the session record. Without this,
 	// LiteLLM-routed sessions (spawned with env_overrides only) end up with
@@ -95,8 +94,8 @@ func spawnSession(ctx context.Context, name, directory string, mission *string, 
 			"ANTHROPIC_BASE_URL": quotaProxyURL,
 		}
 	} else if _, hasBaseURL := envOverrides["ANTHROPIC_BASE_URL"]; !hasBaseURL {
-		// Profile-backed sessions (e.g. "deepseek"/"openai" profiles that don't
-		// explicitly set ANTHROPIC_BASE_URL) also route via proxy by default.
+		// Sessions without an explicit ANTHROPIC_BASE_URL (i.e. not LiteLLM-routed)
+		// also route via the proxy by default.
 		envOverrides["ANTHROPIC_BASE_URL"] = quotaProxyURL
 	}
 
@@ -116,7 +115,7 @@ func spawnSession(ctx context.Context, name, directory string, mission *string, 
 		}
 	}
 
-	s, err := createSession(ctx, name, directory, mission, false, model, profile)
+	s, err := createSession(ctx, name, directory, mission, false, model)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}

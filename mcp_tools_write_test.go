@@ -6,7 +6,7 @@ import (
 )
 
 // TestCreateSession_Basic verifies that createSession stores name, directory,
-// mission, model, and profile correctly and round-trips through getSession.
+// mission, and model correctly and round-trips through getSession.
 func TestCreateSession_Basic(t *testing.T) {
 	defer setupTestDB(t)()
 	ctx := context.Background()
@@ -15,7 +15,7 @@ func TestCreateSession_Basic(t *testing.T) {
 	model := "claude-sonnet-4-6"
 
 	sess, err := createSession(ctx, "my-named-session", "/tmp/work-dir",
-		&mission, false, model, "")
+		&mission, false, model)
 	if err != nil {
 		t.Fatalf("createSession: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestCreateSession_NilMission(t *testing.T) {
 	defer setupTestDB(t)()
 	ctx := context.Background()
 
-	sess, err := createSession(ctx, "minimal", "/tmp", nil, false, "", "")
+	sess, err := createSession(ctx, "minimal", "/tmp", nil, false, "")
 	if err != nil {
 		t.Fatalf("createSession: %v", err)
 	}

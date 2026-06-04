@@ -22,8 +22,7 @@ type Session struct {
 	Directory       string  `json:"directory"`
 	Mission         *string `json:"mission,omitempty"`
 	ClaudeSessionID *string `json:"claude_session_id,omitempty"`
-	Model           string  `json:"model,omitempty"`   // "" = default claude model
-	Profile         string  `json:"profile,omitempty"` // deprecated/unused (happier removed); retained for DB compat
+	Model           string  `json:"model,omitempty"` // "" = default claude model
 	Hidden          bool    `json:"hidden"`
 	Status          string  `json:"status"`
 	CreatedAt       int64   `json:"created_at"`
@@ -88,15 +87,15 @@ func generateID() string {
 	return hex.EncodeToString(b)
 }
 
-func createSession(ctx context.Context, name, directory string, mission *string, hidden bool, model, profile string) (*Session, error) {
+func createSession(ctx context.Context, name, directory string, mission *string, hidden bool, model string) (*Session, error) {
 	id := generateID()
 	tmuxName := "sw-" + id
 	now := time.Now().Unix()
 
 	_, err := database.ExecContext(ctx,
-		`INSERT INTO managed_sessions (id, name, tmux_session, directory, mission, model, profile, hidden, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, name, tmuxName, directory, mission, nullableString(model), nullableString(profile), boolToInt(hidden), "running", now, now,
+		`INSERT INTO managed_sessions (id, name, tmux_session, directory, mission, model, hidden, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, name, tmuxName, directory, mission, nullableString(model), boolToInt(hidden), "running", now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert session: %w", err)
@@ -113,7 +112,6 @@ func createSession(ctx context.Context, name, directory string, mission *string,
 		Directory:   directory,
 		Mission:     mission,
 		Model:       model,
-		Profile:     profile,
 		Hidden:      hidden,
 		Status:      "running",
 		CreatedAt:   now,
@@ -139,7 +137,7 @@ func nullableString(s string) interface{} {
 
 func listSessions(ctx context.Context) ([]Session, error) {
 	rows, err := database.QueryContext(ctx,
-		`SELECT id, name, tmux_session, directory, mission, claude_session_id, COALESCE(model,''), COALESCE(profile,''), hidden, status, created_at, updated_at, worktree_path, git_branch, repo_path
+		`SELECT id, name, tmux_session, directory, mission, claude_session_id, COALESCE(model,''), hidden, status, created_at, updated_at, worktree_path, git_branch, repo_path
 		 FROM managed_sessions ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -151,7 +149,7 @@ func listSessions(ctx context.Context) ([]Session, error) {
 		var s Session
 		var mission, claudeID, worktreePath, gitBranch, repoPath sql.NullString
 		var hiddenInt int
-		if err := rows.Scan(&s.ID, &s.Name, &s.TmuxSession, &s.Directory, &mission, &claudeID, &s.Model, &s.Profile, &hiddenInt, &s.Status, &s.CreatedAt, &s.UpdatedAt, &worktreePath, &gitBranch, &repoPath); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.TmuxSession, &s.Directory, &mission, &claudeID, &s.Model, &hiddenInt, &s.Status, &s.CreatedAt, &s.UpdatedAt, &worktreePath, &gitBranch, &repoPath); err != nil {
 			return nil, err
 		}
 		if mission.Valid {
@@ -180,9 +178,9 @@ func getSession(ctx context.Context, id string) (*Session, error) {
 	var mission, claudeID, worktreePath, gitBranch, repoPath sql.NullString
 	var hiddenInt int
 	err := database.QueryRowContext(ctx,
-		`SELECT id, name, tmux_session, directory, mission, claude_session_id, COALESCE(model,''), COALESCE(profile,''), hidden, status, created_at, updated_at, worktree_path, git_branch, repo_path
+		`SELECT id, name, tmux_session, directory, mission, claude_session_id, COALESCE(model,''), hidden, status, created_at, updated_at, worktree_path, git_branch, repo_path
 		 FROM managed_sessions WHERE id = ?`, id,
-	).Scan(&s.ID, &s.Name, &s.TmuxSession, &s.Directory, &mission, &claudeID, &s.Model, &s.Profile, &hiddenInt, &s.Status, &s.CreatedAt, &s.UpdatedAt, &worktreePath, &gitBranch, &repoPath)
+	).Scan(&s.ID, &s.Name, &s.TmuxSession, &s.Directory, &mission, &claudeID, &s.Model, &hiddenInt, &s.Status, &s.CreatedAt, &s.UpdatedAt, &worktreePath, &gitBranch, &repoPath)
 	if err != nil {
 		return nil, err
 	}
@@ -276,17 +274,6 @@ func renameSession(ctx context.Context, id, name string) error {
 	return nil
 }
 
-func updateSessionProfile(ctx context.Context, id, profile string) error {
-	if database == nil {
-		return nil
-	}
-	_, err := database.ExecContext(ctx,
-		"UPDATE managed_sessions SET profile = ?, updated_at = ? WHERE id = ?",
-		nullableString(profile), time.Now().Unix(), id,
-	)
-	return err
-}
-
 func updateSessionDirectory(ctx context.Context, id, directory string) error {
 	if database == nil {
 		return nil
@@ -298,18 +285,14 @@ func updateSessionDirectory(ctx context.Context, id, directory string) error {
 	return err
 }
 
-// updateSessionFields atomically updates any combination of profile, directory,
-// and mission in a single SQL statement. Pass nil for fields to leave unchanged.
-func updateSessionFields(ctx context.Context, id string, profile, directory, mission *string) error {
+// updateSessionFields atomically updates any combination of directory and
+// mission in a single SQL statement. Pass nil for fields to leave unchanged.
+func updateSessionFields(ctx context.Context, id string, directory, mission *string) error {
 	if database == nil {
 		return nil
 	}
 	setClauses := []string{"updated_at = ?"}
 	args := []interface{}{time.Now().Unix()}
-	if profile != nil {
-		setClauses = append(setClauses, "profile = ?")
-		args = append(args, nullableString(*profile))
-	}
 	if directory != nil {
 		setClauses = append(setClauses, "directory = ?")
 		args = append(args, nullableString(*directory))

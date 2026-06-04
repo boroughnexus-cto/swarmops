@@ -97,7 +97,7 @@ func TestDefaultModelFallbackIsValidAlias(t *testing.T) {
 	if defaultSessionModelFallback == "" {
 		t.Fatal("defaultSessionModelFallback must not be empty")
 	}
-	// Known happier/claude aliases as of 2026-05.
+	// Known claude aliases as of 2026-05.
 	valid := []string{"haiku", "sonnet", "opus"}
 	for _, v := range valid {
 		if strings.EqualFold(defaultSessionModelFallback, v) {

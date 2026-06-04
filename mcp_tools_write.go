@@ -22,7 +22,6 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"context_id":   stringProp("Optional tkn-context ID to attach to the session"),
 				"context_name": stringProp("Optional human-readable context label (display only — paired with context_id)"),
 				"model":        stringProp("Optional model name or alias (e.g. 'sonnet', 'opus', 'claude-sonnet-4-6'). Defaults to system setting."),
-				"profile":      stringProp("Deprecated and ignored (happier removed). Retained for backward compatibility; leave empty."),
 				"task_brief":   stringProp("Optional task brief written to TASK.md in the working directory before the agent starts."),
 				"env_overrides": map[string]interface{}{
 					"type":                 "object",
@@ -59,8 +58,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			}
 			name = autoPrefixSessionName(name, prefixModel, envOverrides)
 
-			profile := getStringArg(args, "profile", "")
-			return svc.RunTask(ctx, name, directory, mission, model, profile, taskBrief, envOverrides)
+			return svc.RunTask(ctx, name, directory, mission, model, taskBrief, envOverrides)
 		},
 	)
 
@@ -82,7 +80,6 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"context_id":    stringProp("Optional tkn-context ID to attach to the session."),
 				"context_name":  stringProp("Optional human-readable context label (display only)."),
 				"model":         stringProp("Optional model name or alias (e.g. 'sonnet', 'opus'). Defaults to system setting."),
-				"profile":       stringProp("Deprecated and ignored (happier removed). Retained for backward compatibility; leave empty."),
 				"env_overrides": map[string]interface{}{
 					"type":                 "object",
 					"description":          "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
@@ -139,8 +136,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 			}
 			name = autoPrefixSessionName(name, prefixModel, envOverrides)
 
-			profile := getStringArg(args, "profile", "")
-			return svc.SpawnAgent(ctx, name, repoPath, worktreePath, branch, mission, model, profile, taskBrief, envOverrides)
+			return svc.SpawnAgent(ctx, name, repoPath, worktreePath, branch, mission, model, taskBrief, envOverrides)
 		},
 	)
 
@@ -230,13 +226,12 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 	reg.Register(
 		ToolDefinition{
 			Name:        "swop_update_session",
-			Description: "[WRITE] Update editable session fields: name, mission, directory, profile, context_id/context_name. Only supplied (non-empty) fields are changed. Profile change takes effect on next restart — does not auto-restart the session.",
+			Description: "[WRITE] Update editable session fields: name, mission, directory, context_id/context_name. Only supplied (non-empty) fields are changed.",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"id":           stringProp("Session ID (required)"),
 				"name":         stringProp("New session name (leave empty to keep current)"),
 				"mission":      stringProp("New mission statement; pass empty string to clear"),
 				"directory":    stringProp("New working directory (validated to exist; takes effect on next restart)"),
-				"profile":      stringProp("Deprecated and ignored (happier removed). Retained for backward compatibility."),
 				"context_id":   stringProp("New context ID (empty to clear)"),
 				"context_name": stringProp("New context display name (empty to clear)"),
 			}, []string{"id"}),
@@ -269,13 +264,6 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 					return nil, fmt.Errorf("directory: %w", err)
 				}
 				notes = append(notes, "directory updated (takes effect on next restart)")
-			}
-			if _, hasProfile := args["profile"]; hasProfile {
-				profile := getStringArg(args, "profile", "")
-				if err := svc.UpdateSessionProfile(ctx, id, profile); err != nil {
-					return nil, fmt.Errorf("profile: %w", err)
-				}
-				notes = append(notes, "profile updated (takes effect on next restart)")
 			}
 			if _, hasCtx := args["context_id"]; hasCtx {
 				ctxID := getStringArg(args, "context_id", "")
@@ -629,7 +617,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				// to keep the system prompt under control.
 				sessionEnv = stashMCPServers(args, sessionEnv)
 				missionStr := goal
-				sess, err := svc.RunTask(ctx, name, matched.LocalPath, &missionStr, sessionModel, "", goal, sessionEnv)
+				sess, err := svc.RunTask(ctx, name, matched.LocalPath, &missionStr, sessionModel, goal, sessionEnv)
 				if err != nil {
 					return nil, fmt.Errorf("spawn session: %w", err)
 				}
