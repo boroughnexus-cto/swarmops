@@ -81,7 +81,7 @@ type sidebarItem struct {
 	mission         string // optional mission statement
 	directory       string // working directory for session restart
 	claudeSessionID string // Claude session ID for resume
-	profile         string // happier backend profile (empty = anthropic default)
+	profile         string // deprecated/unused (happier removed)
 	// Pool slot fields
 	slotID   string
 	model    string // claude model override (session) or pool model name (pool slot)
@@ -107,12 +107,6 @@ type itemsMsg struct {
 type activityCaptureMsg struct {
 	captures []sessionCapture
 }
-type profileRestartDoneMsg struct {
-	sessionID    string
-	sessionLabel string
-	profileLabel string
-	happierFound bool // true if new happier session ID was discovered
-}
 
 // ─── Model ───────────────────────────────────────────────────────────────────
 
@@ -132,7 +126,6 @@ const (
 	modeFeedbackType
 	modeFeedbackText
 	modeAuditLog
-	modeEditProfile  // change profile and restart session
 	modeEditDir      // change working directory for a session
 	modeGoalPrompt   // smart session: enter goal text
 	modeGoalThinking // smart session: waiting for brain result
@@ -533,28 +526,6 @@ func toInt64(v interface{}) int64 {
 	}
 }
 
-// restartSessionWithProfileCmd runs the kill-sleep-restart sequence in a
-// goroutine (tea.Cmd) so the Bubbletea event loop is never blocked.
-func restartSessionWithProfileCmd(tmuxSess, sessionID, name string, happierParts []string, profileLabel string) tea.Cmd {
-	return func() tea.Msg {
-		pre := listHappierSessionIDs()
-		exec.Command("tmux", "send-keys", "-t", tmuxSess, "C-c").Run()
-		time.Sleep(200 * time.Millisecond)
-		exec.Command("tmux", "send-keys", "-t", tmuxSess, "C-c").Run()
-		time.Sleep(200 * time.Millisecond)
-		exec.Command("tmux", "send-keys", "-t", tmuxSess, "exit", "Enter").Run()
-		time.Sleep(500 * time.Millisecond)
-		exec.Command("tmux", "send-keys", "-t", tmuxSess, strings.Join(happierParts, " "), "Enter").Run()
-		found := false
-		if newID := discoverNewHappierSession(pre, 15*time.Second); newID != "" {
-			found = true
-			updateClaudeSessionID(context.Background(), sessionID, newID)
-			setHappierTitle(newID, name)
-		}
-		return profileRestartDoneMsg{sessionID: sessionID, sessionLabel: name, profileLabel: profileLabel, happierFound: found}
-	}
-}
-
 func loadTerminal(tmuxName string) tea.Cmd {
 	return func() tea.Msg {
 		content, err := captureTerminal(tmuxName)
@@ -680,15 +651,6 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case flashClearMsg:
 		m.flash = ""
 		return m, nil
-
-	case profileRestartDoneMsg:
-		delete(m.restartingSessionIDs, msg.sessionID)
-		if msg.happierFound {
-			m.flash = fmt.Sprintf("Restarted %s with profile: %s", msg.sessionLabel, msg.profileLabel)
-		} else {
-			m.flash = fmt.Sprintf("Restarted %s (profile: %s, session ID not synced)", msg.sessionLabel, msg.profileLabel)
-		}
-		return m, flashClearCmd()
 
 	case itemsMsg:
 		// Classify activity in the Update loop (single-threaded) using captures from the command
@@ -933,7 +895,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 									dir = h
 								}
 							}
-							cArgs := resumeClaudeCmd(item.claudeSessionID, item.model)
+							cArgs := resumeClaudeCmd(item.claudeSessionID, item.model, item.label)
 							args := append([]string{"new-session", "-d", "-s", item.tmuxSession, "-c", dir, "-x", "200", "-y", "50", "--"}, cArgs...)
 							if out, err := exec.Command("tmux", args...).CombinedOutput(); err != nil {
 								m.flash = fmt.Sprintf("Failed to recreate tmux session: %s", strings.TrimSpace(string(out)))
@@ -956,7 +918,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					time.Sleep(200 * time.Millisecond)
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, "exit", "Enter").Run()
 					time.Sleep(500 * time.Millisecond)
-					cArgs := resumeClaudeCmd(item.claudeSessionID, item.model)
+					cArgs := resumeClaudeCmd(item.claudeSessionID, item.model, item.label)
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, strings.Join(cArgs, " "), "Enter").Run()
 					go compactWatcher(item.tmuxSession, 90*time.Second)
 					m.flash = fmt.Sprintf("Reconnecting %s (MCPs reloading, history restored)", item.label)
@@ -975,18 +937,13 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					time.Sleep(200 * time.Millisecond)
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, "exit", "Enter").Run()
 					time.Sleep(500 * time.Millisecond)
-					parts := []string{"happier", "--yolo"}
-					parts = append(parts, profileToHappierArgs(item.profile)...)
-					parts = append(parts, "--model", effectiveModel(item.model))
-					preIDs := listHappierSessionIDs()
+					// Fresh native claude session (new session-id = no history).
+					newID := generateUUID()
+					parts := []string{"claude"}
+					parts = append(parts, remoteControlArgs(item.label)...)
+					parts = append(parts, "--session-id", newID, "--dangerously-skip-permissions", "--model", effectiveModel(item.model))
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, strings.Join(parts, " "), "Enter").Run()
-					// Discover new happier ID and set title (fresh start creates a new session)
-					go func(sessionID, name string, pre map[string]bool) {
-						if newID := discoverNewHappierSession(pre, 15*time.Second); newID != "" {
-							updateClaudeSessionID(context.Background(), sessionID, newID)
-							setHappierTitle(newID, name)
-						}
-					}(item.sessionID, item.label, preIDs)
+					updateClaudeSessionID(context.Background(), item.sessionID, newID)
 					m.flash = fmt.Sprintf("Restarted Claude in %s", item.label)
 				}
 				return m, nil
@@ -1008,15 +965,6 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.newMissionInput.Focus()
 				m.flash = "Edit mission (esc to cancel, enter to save)"
 				return m, textinput.Blink
-			}
-			return m, nil
-		case "alt+k":
-			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
-				item := m.items[m.cursor]
-				// Set picker to current profile
-				m.editProfileIdx = profileIndexFromString(item.profile)
-				m.mode = modeEditProfile
-				m.flash = profilePickerFlash(m.editProfileIdx)
 			}
 			return m, nil
 		case "alt+g":
@@ -1306,68 +1254,6 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.newMissionInput, cmd = m.newMissionInput.Update(msg)
 			return m, cmd
-		}
-
-	case modeEditProfile:
-		switch key {
-		case "left", "alt+a", "h":
-			if m.editProfileIdx > 0 {
-				m.editProfileIdx--
-				m.flash = profilePickerFlash(m.editProfileIdx)
-			}
-			return m, nil
-		case "right", "alt+z", "l":
-			if m.editProfileIdx < len(backendOptions)-1 {
-				m.editProfileIdx++
-				m.flash = profilePickerFlash(m.editProfileIdx)
-			}
-			return m, nil
-		case "enter":
-			if m.editProfileIdx < 0 || m.editProfileIdx >= len(backendOptions) {
-				m.mode = modePassthrough
-				return m, nil
-			}
-			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
-				item := m.items[m.cursor]
-				if m.restartingSessionIDs[item.sessionID] {
-					m.flash = fmt.Sprintf("%s is already restarting", item.label)
-					m.mode = modePassthrough
-					return m, flashClearCmd()
-				}
-				opt := backendOptions[m.editProfileIdx]
-				// Persist profile change; abort restart if DB write fails
-				var dbErr error
-				if m.api != nil {
-					dbErr = m.api.updateSessionProfile(item.sessionID, opt.profile)
-				} else {
-					dbErr = updateSessionProfile(context.Background(), item.sessionID, opt.profile)
-				}
-				if dbErr != nil {
-					m.flash = fmt.Sprintf("Failed to save profile: %v", dbErr)
-					m.mode = modePassthrough
-					return m, flashClearCmd()
-				}
-				// Build restart command with new profile
-				happierParts := []string{"happier", "--yolo"}
-				happierParts = append(happierParts, profileToHappierArgs(opt.profile)...)
-				if opt.model != "" {
-					happierParts = append(happierParts, "--model", opt.model)
-				} else {
-					happierParts = append(happierParts, "--model", effectiveModel(""))
-				}
-				m.restartingSessionIDs[item.sessionID] = true
-				m.flash = fmt.Sprintf("Restarting %s with profile: %s...", item.label, opt.label)
-				m.mode = modePassthrough
-				return m, tea.Batch(
-					loadItemsCmd(m.api),
-					restartSessionWithProfileCmd(item.tmuxSession, item.sessionID, item.label, happierParts, opt.label),
-				)
-			}
-			m.mode = modePassthrough
-			return m, loadItemsCmd(m.api)
-		case "esc":
-			m.mode = modePassthrough
-			m.flash = ""
 		}
 
 	case modeEditDir:
@@ -1991,8 +1877,6 @@ func (m tuiModel) View() string {
 		statusLine = "Mission: " + m.newMissionInput.View()
 	case modeRename:
 		statusLine = "Rename: " + m.renameInput.View()
-	case modeEditProfile:
-		statusLine = profilePickerFlash(m.editProfileIdx)
 	case modeEditDir:
 		statusLine = "Dir: " + m.editDirInput.View()
 	case modeGoalPrompt:
@@ -2019,7 +1903,7 @@ func (m tuiModel) View() string {
 		if m.flash != "" {
 			statusLine = dimStyle.Render(m.flash)
 		} else {
-			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N smart-new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+K profile │ Alt+G dir │ Alt+D delete") + "\n" +
+			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N smart-new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+G dir │ Alt+D delete") + "\n" +
 				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+X copy │ Alt+Q quit")
 		}
 	}
@@ -2544,26 +2428,24 @@ func animatedIndicator(activity string, frame int) string {
 type backendOption struct {
 	label        string            // display name
 	model        string            // claude model override (empty = default for profile)
-	profile      string            // happier backend profile (empty = anthropic)
+	profile      string            // deprecated/unused (happier removed)
 	envOverrides map[string]string // extra env injected into the tmux session (e.g. LiteLLM routing)
 }
 
-// backendOptions is the ordered list of backend choices presented in the new-session
-// wizard (modeNewModel) and the per-session profile editor (modeEditProfile).
-// Indices: 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai, 6=[gpt], 7=[dseek]
+// backendOptions is the ordered list of backend choices presented in the
+// new-session wizard (modeNewModel).
+// Indices: 0=default, 1=haiku, 2=sonnet, 3=opus, 4=[gpt], 5=[dseek]
 //
 // The `[gpt]` and `[dseek]` entries route Claude Code through LiteLLM by
 // setting ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY+ANTHROPIC_MODEL via env, and
 // rely on autoPrefixSessionName to tag the resulting session name.
 var backendOptions = []backendOption{
-	{label: "default", model: "", profile: ""},
-	{label: "haiku", model: "claude-haiku-4-5-20251001", profile: ""},
-	{label: "sonnet", model: "claude-sonnet-4-6", profile: ""},
-	{label: "opus", model: "claude-opus-4-6", profile: ""},
-	{label: "deepseek", model: "", profile: "deepseek"},
-	{label: "openai", model: "", profile: "openai"},
-	{label: "[gpt]", model: litellmModelGPT55, profile: "", envOverrides: litellmEnvOverrides(litellmModelGPT55)},
-	{label: "[dseek]", model: litellmModelDeepseek4, profile: "", envOverrides: litellmEnvOverrides(litellmModelDeepseek4)},
+	{label: "default", model: ""},
+	{label: "haiku", model: "claude-haiku-4-5-20251001"},
+	{label: "sonnet", model: "claude-sonnet-4-6"},
+	{label: "opus", model: "claude-opus-4-6"},
+	{label: "[gpt]", model: litellmModelGPT55, envOverrides: litellmEnvOverrides(litellmModelGPT55)},
+	{label: "[dseek]", model: litellmModelDeepseek4, envOverrides: litellmEnvOverrides(litellmModelDeepseek4)},
 }
 
 // envOverridesFromIndex returns the env override map for picker index idx,
@@ -2583,23 +2465,12 @@ func modelIDFromIndex(idx int) string {
 	return ""
 }
 
-// profileFromIndex returns the happier profile string for picker index idx.
+// profileFromIndex returns the (deprecated, always-empty) profile string for picker index idx.
 func profileFromIndex(idx int) string {
 	if idx >= 0 && idx < len(backendOptions) {
 		return backendOptions[idx].profile
 	}
 	return ""
-}
-
-// profileIndexFromString returns the backendOptions index for a given profile string.
-// Falls back to 0 (default) if not found.
-func profileIndexFromString(profile string) int {
-	for i, opt := range backendOptions {
-		if opt.profile == profile {
-			return i
-		}
-	}
-	return 0
 }
 
 // modelPickerFlash returns the status bar message for the model/backend picker step.
@@ -2613,19 +2484,6 @@ func modelPickerFlash(idx int) string {
 		}
 	}
 	return "Backend: " + strings.Join(parts, " │ ") + "  (←/→ to pick, Enter to continue)"
-}
-
-// profilePickerFlash returns the status bar message for the profile edit mode.
-func profilePickerFlash(idx int) string {
-	var parts []string
-	for i, opt := range backendOptions {
-		if i == idx {
-			parts = append(parts, "["+opt.label+"]")
-		} else {
-			parts = append(parts, opt.label)
-		}
-	}
-	return "Profile: " + strings.Join(parts, " │ ") + "  (←/→ to pick, Enter to apply+restart, Esc to cancel)"
 }
 
 func runTUI(api swarmClient) error {
@@ -2678,23 +2536,13 @@ func swapNestedTmuxPrefix() (func(), func()) {
 }
 
 // resumeClaudeCmd returns the command args for restarting a session.
-// Uses happier when available; falls back to claude otherwise.
-// For happier: starts a fresh wrapper each time. We don't pass
-// `--existing-session` because happier needs a "session attach secret"
-// to resume that we don't persist — passing the session id alone crashes
-// happier ("missing session attach secret") and kills the tmux window.
-// For claude: UUID IDs are resumed via --resume; non-UUID IDs (happier-era) start fresh.
-//
-// For happier we set ANTHROPIC_MODEL via an `env` prefix instead of passing
-// `--model` directly — happier's `--model` flag triggers a bug where it
-// deletes its hook settings file before claude can read it.
-func resumeClaudeCmd(claudeID, model string) []string {
-	if happierAvailable() {
-		args := []string{"env", "ANTHROPIC_MODEL=" + effectiveModel(model), "happier", "--yolo"}
-		return args
-	}
-	// claude fallback
-	args := []string{"claude", "--dangerously-skip-permissions"}
+// UUID session ids are resumed via `claude --resume <id>`; sessions with a
+// non-UUID id (legacy) start a fresh conversation — their history is still on
+// disk and can be reopened with /resume in-session.
+func resumeClaudeCmd(claudeID, model, name string) []string {
+	args := []string{"claude"}
+	args = append(args, remoteControlArgs(name)...)
+	args = append(args, "--dangerously-skip-permissions")
 	if claudeID != "" && isValidUUID(claudeID) {
 		args = append(args, "--resume", claudeID)
 	}

@@ -23,7 +23,7 @@ type Session struct {
 	Mission         *string `json:"mission,omitempty"`
 	ClaudeSessionID *string `json:"claude_session_id,omitempty"`
 	Model           string  `json:"model,omitempty"`   // "" = default claude model
-	Profile         string  `json:"profile,omitempty"` // happier --profile id; "" = anthropic (default)
+	Profile         string  `json:"profile,omitempty"` // deprecated/unused (happier removed); retained for DB compat
 	Hidden          bool    `json:"hidden"`
 	Status          string  `json:"status"`
 	CreatedAt       int64   `json:"created_at"`
@@ -273,12 +273,6 @@ func renameSession(ctx context.Context, id, name string) error {
 		return err
 	}
 	recordSessionEvent(id, name, "renamed", "")
-	// Sync title in happier app asynchronously so callers aren't blocked.
-	s, err2 := getSession(ctx, id)
-	if err2 == nil && s.ClaudeSessionID != nil && *s.ClaudeSessionID != "" {
-		happierID := *s.ClaudeSessionID
-		go setHappierTitle(happierID, name)
-	}
 	return nil
 }
 

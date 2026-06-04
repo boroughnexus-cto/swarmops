@@ -22,7 +22,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"context_id":   stringProp("Optional tkn-context ID to attach to the session"),
 				"context_name": stringProp("Optional human-readable context label (display only — paired with context_id)"),
 				"model":        stringProp("Optional model name or alias (e.g. 'sonnet', 'opus', 'claude-sonnet-4-6'). Defaults to system setting."),
-				"profile":      stringProp("Optional happier backend profile (e.g. 'deepseek', 'openai', 'gemini'). Defaults to 'anthropic'. Takes effect on next restart if session already exists."),
+				"profile":      stringProp("Deprecated and ignored (happier removed). Retained for backward compatibility; leave empty."),
 				"task_brief":   stringProp("Optional task brief written to TASK.md in the working directory before the agent starts."),
 				"env_overrides": map[string]interface{}{
 					"type":                 "object",
@@ -82,7 +82,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"context_id":    stringProp("Optional tkn-context ID to attach to the session."),
 				"context_name":  stringProp("Optional human-readable context label (display only)."),
 				"model":         stringProp("Optional model name or alias (e.g. 'sonnet', 'opus'). Defaults to system setting."),
-				"profile":       stringProp("Optional happier backend profile (e.g. 'deepseek', 'openai', 'gemini'). Defaults to 'anthropic'."),
+				"profile":       stringProp("Deprecated and ignored (happier removed). Retained for backward compatibility; leave empty."),
 				"env_overrides": map[string]interface{}{
 					"type":                 "object",
 					"description":          "Optional environment variable overrides injected into the session. Omit for the default Anthropic API. To route through LiteLLM, set ANTHROPIC_BASE_URL+ANTHROPIC_API_KEY (or use the TUI [gpt]/[dseek] picker entries which do this for you). Pick a backend with ANTHROPIC_MODEL: 'chatgptsub-gpt-5.5' → [gpt], 'or-deepseek-v4-pro' → [dseek]. Session names get the matching auto-prefix. Keys and values must be strings.",
@@ -236,7 +236,7 @@ func registerWriteTools(reg *ToolRegistry, svc *Services, enablePoolTools bool) 
 				"name":         stringProp("New session name (leave empty to keep current)"),
 				"mission":      stringProp("New mission statement; pass empty string to clear"),
 				"directory":    stringProp("New working directory (validated to exist; takes effect on next restart)"),
-				"profile":      stringProp("New happier backend profile (e.g. 'deepseek', 'openai', 'gemini', '' for default anthropic). Takes effect on next restart."),
+				"profile":      stringProp("Deprecated and ignored (happier removed). Retained for backward compatibility."),
 				"context_id":   stringProp("New context ID (empty to clear)"),
 				"context_name": stringProp("New context display name (empty to clear)"),
 			}, []string{"id"}),

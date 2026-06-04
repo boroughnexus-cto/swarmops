@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 // Services provides business logic shared by REST API and MCP handlers.
@@ -90,7 +89,7 @@ func (s *Services) GetExecution(ctx context.Context, id string) (*Session, error
 // RunTask creates and starts a new session.
 // mission is optional (pass nil/empty to skip).
 // model is optional (empty string falls back to the default in spawnSession).
-// profile is optional; sets the happier backend profile (e.g. "deepseek", "openai").
+// profile is deprecated and ignored (happier removed).
 // taskBrief is optional; if non-empty, TASK.md is written to directory before spawn.
 // envOverrides injects extra env vars into the session (e.g. ANTHROPIC_BASE_URL for LiteLLM routing).
 // Pass nil to inherit the swarmops process environment unchanged (default, existing behaviour).
@@ -112,7 +111,7 @@ func (s *Services) RunTask(ctx context.Context, name, directory string, mission 
 // SpawnAgent atomically creates a git worktree, writes an optional TASK.md,
 // and spawns a Claude Code session inside the worktree.
 // On any failure after worktree creation, the worktree is removed (rollback).
-// profile is optional; sets the happier backend profile (e.g. "deepseek", "openai").
+// profile is deprecated and ignored (happier removed).
 // envOverrides injects extra env vars into the session (e.g. ANTHROPIC_BASE_URL for LiteLLM routing).
 // Pass nil to inherit the swarmops process environment unchanged (default, existing behaviour).
 func (s *Services) SpawnAgent(ctx context.Context, name, repoPath, worktreePath, branch string, mission *string, model, profile, taskBrief string, envOverrides map[string]string) (*Session, error) {
@@ -227,11 +226,6 @@ func (s *Services) StartSession(ctx context.Context, id string) error {
 	if sess.Status == "running" {
 		return fmt.Errorf("session %s is already running", id)
 	}
-	// Snapshot active happier ids before (re)launch — resumeClaudeCmd starts a
-	// fresh happier session (no --existing-session) with a NEW id, so below we
-	// rebind the id and reapply the SwarmOps name as the app title (matched by
-	// cwd); otherwise the resumed session shows its cwd basename, not its name.
-	preIDs := activeHappierIDSet()
 	dir := "."
 	if sess.Directory != "" {
 		dir = sess.Directory
@@ -241,7 +235,7 @@ func (s *Services) StartSession(ctx context.Context, id string) error {
 		if sess.ClaudeSessionID != nil {
 			claudeID = *sess.ClaudeSessionID
 		}
-		cArgs := resumeClaudeCmd(claudeID, sess.Model)
+		cArgs := resumeClaudeCmd(claudeID, sess.Model, sess.Name)
 		// Use the same env-injection path as restore.go: ANTHROPIC_MODEL
 		// always set, plus the LiteLLM endpoint env when the session was
 		// originally spawned through LiteLLM (name has [gpt]/[dseek]
@@ -262,12 +256,10 @@ func (s *Services) StartSession(ctx context.Context, id string) error {
 		if sess.ClaudeSessionID != nil {
 			claudeID = *sess.ClaudeSessionID
 		}
-		cArgs := resumeClaudeCmd(claudeID, sess.Model)
+		cArgs := resumeClaudeCmd(claudeID, sess.Model, sess.Name)
 		exec.Command("tmux", append([]string{"send-keys", "-t", sess.TmuxSession}, append(cArgs, "")...)...).Run()
 		exec.Command("tmux", "send-keys", "-t", sess.TmuxSession, strings.Join(cArgs, " "), "Enter").Run()
 	}
-	// Rebind the new happier session id + reapply the SwarmOps name as the app title.
-	syncHappierIdentity(ctx, sess.ID, sess.Name, dir, preIDs, 20*time.Second)
 	return nil
 }
 
