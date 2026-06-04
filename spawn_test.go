@@ -25,23 +25,51 @@ func TestEffectiveModel(t *testing.T) {
 	}
 }
 
-func TestResumeClaudeCmdAlwaysPassesModel(t *testing.T) {
-	if !happierAvailable() {
-		t.Skip("happier not available in this environment")
+func TestResumeClaudeCmdNative(t *testing.T) {
+	// Empty/invalid id + empty model → bare native claude, no --resume, no --model.
+	// Remote Control is always enabled.
+	args := resumeClaudeCmd("", "", "")
+	if len(args) == 0 || args[0] != "claude" {
+		t.Fatalf("resumeClaudeCmd should invoke claude; got %v", args)
 	}
-	t.Setenv("SWARMOPS_DEFAULT_MODEL", "")
+	if !hasFlag(args, "--remote-control") {
+		t.Errorf("resumeClaudeCmd should always enable --remote-control; got %v", args)
+	}
+	if hasFlag(args, "--resume") {
+		t.Errorf("resumeClaudeCmd(\"\",\"\",\"\") should not pass --resume; got %v", args)
+	}
 
-	// With happier available, model is passed via ANTHROPIC_MODEL env var
-	args := resumeClaudeCmd("", "")
-	if !containsEnv(args, "ANTHROPIC_MODEL=sonnet") {
-		t.Errorf("resumeClaudeCmd with empty model should set ANTHROPIC_MODEL=sonnet; got %v", args)
+	// A valid UUID id is resumed via --resume; explicit model via --model; named RC.
+	id := generateUUID()
+	args = resumeClaudeCmd(id, "opus", "my-session")
+	if !containsPair(args, "--resume", id) {
+		t.Errorf("resumeClaudeCmd(uuid, ...) should pass --resume %s; got %v", id, args)
+	}
+	if !containsPair(args, "--model", "opus") {
+		t.Errorf("resumeClaudeCmd(..., opus) should pass --model opus; got %v", args)
+	}
+	if !containsPair(args, "--remote-control", "my-session") {
+		t.Errorf("resumeClaudeCmd should name remote control after the session; got %v", args)
 	}
 
-	args = resumeClaudeCmd("happier-abc", "opus")
-	if !containsEnv(args, "ANTHROPIC_MODEL=opus") {
-		t.Errorf("resumeClaudeCmd should preserve explicit model via env; got %v", args)
+	// A non-UUID id (legacy) starts a fresh conversation — no --resume.
+	args = resumeClaudeCmd("legacy-abc", "opus", "n")
+	if hasFlag(args, "--resume") {
+		t.Errorf("resumeClaudeCmd with non-UUID id should not pass --resume; got %v", args)
 	}
-	// happier --yolo does not use --existing-session flag
+}
+
+func TestRemoteControlArgs(t *testing.T) {
+	t.Setenv("SWARMOPS_DISABLE_REMOTE_CONTROL", "") // force enabled regardless of ambient env
+	if got := remoteControlArgs("smart-foo"); len(got) != 2 || got[0] != "--remote-control" || got[1] != "smart-foo" {
+		t.Errorf("named: got %v", got)
+	}
+	// Empty or dash-leading names fall back to the bare flag (avoid swallowing next flag).
+	for _, n := range []string{"", "  ", "-x"} {
+		if got := remoteControlArgs(n); len(got) != 1 || got[0] != "--remote-control" {
+			t.Errorf("bare fallback for %q: got %v", n, got)
+		}
+	}
 }
 
 // containsPair returns true if args contains flag immediately followed by value.
@@ -54,10 +82,10 @@ func containsPair(args []string, flag, value string) bool {
 	return false
 }
 
-// containsEnv returns true if args contains an env KEY=value pair.
-func containsEnv(args []string, kv string) bool {
+// hasFlag returns true if args contains the given flag.
+func hasFlag(args []string, flag string) bool {
 	for _, arg := range args {
-		if arg == kv {
+		if arg == flag {
 			return true
 		}
 	}

@@ -8,27 +8,23 @@ import (
 	"strings"
 )
 
-// SwarmOps installs a small wrapper at /home/sbarker/.swarmops/bin/claude-restricted.sh
-// that appends `--strict-mcp-config --mcp-config <path>` to the args happier
-// passes to claude. When spawnSession is called with a non-empty mcp_servers
-// list we:
+// SwarmOps supports launching a session with only a subset of MCP servers.
+// When spawnSession is called with a non-empty mcp_servers list we:
 //
 //  1. Resolve each requested name against the swarmops MCP catalogue
 //     (~/.swarmops/mcp-config.json — 35 servers).
 //  2. Write a session-scoped JSON file containing ONLY those servers.
-//  3. Set HAPPIER_CLAUDE_PATH=<wrapper> + SWARMOPS_RESTRICTED_MCP=<file> on
-//     the tmux session via -e flags.
+//  3. Launch claude with `--strict-mcp-config --mcp-config <file>` so it loads
+//     exactly that subset (see spawnSession).
 //
-// Result: claude boots with happier + the subset; the user-level
-// ~/.claude.json (with all ~50 servers) is ignored thanks to
-// --strict-mcp-config. For [dseek]/[gpt] sessions this cuts the system
-// prompt + tools payload from ~300k tokens to whatever the subset's
-// tool definitions add up to.
+// Result: claude boots with just the subset; the user-level ~/.claude.json
+// (with all ~50 servers) is ignored thanks to --strict-mcp-config. For
+// [dseek]/[gpt] sessions this cuts the system prompt + tools payload from
+// ~300k tokens to whatever the subset's tool definitions add up to.
 
 const (
-	swarmopsMCPCatalogue  = "/home/sbarker/.swarmops/mcp-config.json"
-	swarmopsClaudeWrapper = "/home/sbarker/.swarmops/bin/claude-restricted.sh"
-	swarmopsAgentsDir     = "/home/sbarker/.swarmops/agents"
+	swarmopsMCPCatalogue = "/home/sbarker/.swarmops/mcp-config.json"
+	swarmopsAgentsDir    = "/home/sbarker/.swarmops/agents"
 
 	// swarmopsMCPRestrictKey is a magic envOverrides key the MCP write tools
 	// use to pass a comma-separated list of MCP server names into spawnSession
@@ -150,28 +146,30 @@ func stashMCPServers(args map[string]interface{}, envOverrides map[string]string
 	return envOverrides
 }
 
-// applyMCPRestriction merges the per-session restricted config path and
-// wrapper script path into envOverrides so the spawned tmux session uses
-// the claude-restricted.sh wrapper. Called from spawn.go after the
-// session row exists (we need the session id for the file path).
-//
-// If the wrapper binary isn't installed at the expected path we log and
-// skip — better to spawn with full tools than to fail outright.
-func applyMCPRestriction(sessionID string, requested []string, envOverrides map[string]string) (map[string]string, []string, error) {
-	if len(requested) == 0 {
-		return envOverrides, nil, nil
+// applyMCPRestriction writes the per-session restricted MCP config and returns
+// its path so spawnSession can pass `--strict-mcp-config --mcp-config <path>`
+// to claude directly. Called from spawn.go after the session row exists (we
+// need the session id for the file path). Returns "" when there's nothing to
+// restrict.
+// restrictedMCPConfigPath returns the path to a session's restricted MCP config
+// if one was written at spawn (i.e. the session was created with an mcp_servers
+// subset), or "" otherwise. Used on restore/resume so the subset is re-applied
+// via --strict-mcp-config instead of the session coming back with all servers.
+func restrictedMCPConfigPath(sessionID string) string {
+	p := filepath.Join(swarmopsAgentsDir, sessionID, "restricted-mcp-config.json")
+	if _, err := os.Stat(p); err != nil {
+		return ""
 	}
-	if _, err := os.Stat(swarmopsClaudeWrapper); err != nil {
-		return envOverrides, nil, fmt.Errorf("claude-restricted wrapper missing at %s: %w", swarmopsClaudeWrapper, err)
+	return p
+}
+
+func applyMCPRestriction(sessionID string, requested []string) (string, []string, error) {
+	if len(requested) == 0 {
+		return "", nil, nil
 	}
 	path, unknown, err := writeRestrictedMCPConfig(sessionID, requested)
 	if err != nil {
-		return envOverrides, unknown, err
+		return "", unknown, err
 	}
-	if envOverrides == nil {
-		envOverrides = map[string]string{}
-	}
-	envOverrides["HAPPIER_CLAUDE_PATH"] = swarmopsClaudeWrapper
-	envOverrides["SWARMOPS_RESTRICTED_MCP"] = path
-	return envOverrides, unknown, nil
+	return path, unknown, nil
 }

@@ -41,15 +41,6 @@ func restoreSessions(ctx context.Context) {
 		}
 		args = append(args, "--")
 		args = append(args, cArgs...)
-		// Snapshot happier session ids before launch so we can identify the
-		// fresh one this relaunch creates. Restore drops --existing-session
-		// (see buildClaudeRestoreArgs), so happier always makes a NEW session
-		// with a NEW id — which is why the stored claude_session_id goes stale
-		// and the app loses the title, falling back to the cwd. We rebind both
-		// below, matching the new session by its working directory. Done
-		// synchronously, one session at a time, so the match is unambiguous
-		// even though the loop restores many sessions.
-		preIDs := activeHappierIDSet()
 		if out, err := exec.Command("tmux", args...).CombinedOutput(); err != nil {
 			log.Printf("restore: tmux for %s: %v: %s", s.Name, err, out)
 			updateSessionStatus(ctx, s.ID, "stopped")
@@ -58,10 +49,6 @@ func restoreSessions(ctx context.Context) {
 		if isTmuxAlive(s.TmuxSession) {
 			updateSessionStatus(ctx, s.ID, "running")
 			restored++
-			// Rebind the new happier session id + reapply the SwarmOps name as
-			// the app title. Without this the restored session shows its
-			// working-directory basename instead of its SwarmOps name.
-			syncHappierIdentity(ctx, s.ID, s.Name, dir, preIDs, 25*time.Second)
 			// Inject orientation prompt after Claude has had time to initialise.
 			// Stagger by session index so restores don't all fire at the same instant.
 			delay := 12*time.Second + time.Duration(i)*3*time.Second
@@ -97,16 +84,22 @@ func injectRestorePrompt(s Session, delay time.Duration) {
 }
 
 func buildClaudeRestoreArgs(ctx context.Context, s *Session) []string {
-	args := []string{"happier", "--yolo"}
-	// We don't pass --existing-session for the same reason as
-	// resumeClaudeCmd: happier needs an attach-secret we don't persist and
-	// crashes with "missing session attach secret" otherwise, taking the
-	// tmux window down with it. A fresh happier wrapper is fine — the
-	// claude conversation history is still on disk under
-	// ~/.claude/projects/<workdir>/ and can be resumed via /resume.
-	args = append(args, profileToHappierArgs(s.Profile)...)
-	// Model is passed via ANTHROPIC_MODEL in restoreEnvFor — happier's --model
-	// flag triggers a hook-file race that kills the spawned claude.
+	// Resume the prior conversation by its persisted session id. Sessions created
+	// in native mode have a UUID --session-id; resume them with --resume. Legacy
+	// sessions with a non-UUID id (e.g. happier-era) start a fresh conversation —
+	// their history is still on disk and can be reopened with /resume in-session.
+	args := []string{"claude"}
+	args = append(args, remoteControlArgs(s.Name)...)
+	args = append(args, "--dangerously-skip-permissions")
+	if s.ClaudeSessionID != nil && isValidUUID(*s.ClaudeSessionID) {
+		args = append(args, "--resume", *s.ClaudeSessionID)
+	}
+	// Re-apply the per-session MCP subset if one was set at spawn, so a restored
+	// session doesn't come back with the full ~50-server catalogue.
+	if p := restrictedMCPConfigPath(s.ID); p != "" {
+		args = append(args, "--strict-mcp-config", "--mcp-config", p)
+	}
+	// Model is passed via ANTHROPIC_MODEL in restoreEnvFor.
 	return args
 }
 
