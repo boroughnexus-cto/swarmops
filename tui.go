@@ -81,7 +81,6 @@ type sidebarItem struct {
 	mission         string // optional mission statement
 	directory       string // working directory for session restart
 	claudeSessionID string // Claude session ID for resume
-	profile         string // deprecated/unused (happier removed)
 	// Pool slot fields
 	slotID   string
 	model    string // claude model override (session) or pool model name (pool slot)
@@ -134,14 +133,14 @@ const (
 
 // Spawner abstracts session creation for testability.
 type Spawner interface {
-	Spawn(ctx context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error)
+	Spawn(ctx context.Context, name, dir string, mission *string, model string, envOverrides map[string]string) (*Session, error)
 }
 
 // defaultSpawner calls the real spawnSession function.
 type defaultSpawner struct{}
 
-func (defaultSpawner) Spawn(ctx context.Context, name, dir string, mission *string, model, profile string, envOverrides map[string]string) (*Session, error) {
-	return spawnSession(ctx, name, dir, mission, model, profile, envOverrides)
+func (defaultSpawner) Spawn(ctx context.Context, name, dir string, mission *string, model string, envOverrides map[string]string) (*Session, error) {
+	return spawnSession(ctx, name, dir, mission, model, envOverrides)
 }
 
 type tuiModel struct {
@@ -158,9 +157,8 @@ type tuiModel struct {
 	newDirInput     textinput.Model
 	newMissionInput textinput.Model
 	newModel        int // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
-	// Edit profile / edit directory inputs
-	editProfileIdx int // index in profileOptions slice
-	editDirInput   textinput.Model
+	// Edit directory input
+	editDirInput textinput.Model
 
 	// Smart session creation (modeGoalPrompt / modeGoalThinking / modeGoalConfirm)
 	goalInput         textinput.Model
@@ -428,7 +426,6 @@ func loadItemsCmd(api swarmClient) tea.Cmd {
 				activity:    activity,
 				mission:     mission,
 				model:       s.Model,
-				profile:     s.Profile,
 				directory:   s.Directory,
 				claudeSessionID: func() string {
 					if s.ClaudeSessionID != nil {
@@ -1650,10 +1647,9 @@ func (m *tuiModel) doSpawn() {
 		mission = &v
 	}
 	model := modelIDFromIndex(m.newModel)
-	profile := profileFromIndex(m.newModel)
 	envOverrides := envOverridesFromIndex(m.newModel)
 	name = autoPrefixSessionName(name, model, envOverrides)
-	s, err := m.spawner.Spawn(context.Background(), name, dir, mission, model, profile, envOverrides)
+	s, err := m.spawner.Spawn(context.Background(), name, dir, mission, model, envOverrides)
 	if err != nil {
 		m.flash = "Spawn error: " + err.Error()
 	} else {
@@ -1674,7 +1670,7 @@ func (m *tuiModel) doDispatch(prompt string) {
 	} else {
 		// Spawn new session
 		name := sanitizeSessionName(m.actionTarget)
-		s, err := m.spawner.Spawn(context.Background(), name, os.Getenv("HOME"), nil, "", "", nil)
+		s, err := m.spawner.Spawn(context.Background(), name, os.Getenv("HOME"), nil, "", nil)
 		if err != nil {
 			m.flash = "Spawn error: " + err.Error()
 		} else {
@@ -2424,11 +2420,10 @@ func animatedIndicator(activity string, frame int) string {
 	}
 }
 
-// backendOption describes one entry in the unified model+profile picker.
+// backendOption describes one entry in the unified model picker.
 type backendOption struct {
 	label        string            // display name
-	model        string            // claude model override (empty = default for profile)
-	profile      string            // deprecated/unused (happier removed)
+	model        string            // claude model override (empty = default)
 	envOverrides map[string]string // extra env injected into the tmux session (e.g. LiteLLM routing)
 }
 
@@ -2461,14 +2456,6 @@ func envOverridesFromIndex(idx int) map[string]string {
 func modelIDFromIndex(idx int) string {
 	if idx >= 0 && idx < len(backendOptions) {
 		return backendOptions[idx].model
-	}
-	return ""
-}
-
-// profileFromIndex returns the (deprecated, always-empty) profile string for picker index idx.
-func profileFromIndex(idx int) string {
-	if idx >= 0 && idx < len(backendOptions) {
-		return backendOptions[idx].profile
 	}
 	return ""
 }

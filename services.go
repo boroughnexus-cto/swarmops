@@ -89,11 +89,10 @@ func (s *Services) GetExecution(ctx context.Context, id string) (*Session, error
 // RunTask creates and starts a new session.
 // mission is optional (pass nil/empty to skip).
 // model is optional (empty string falls back to the default in spawnSession).
-// profile is deprecated and ignored (happier removed).
 // taskBrief is optional; if non-empty, TASK.md is written to directory before spawn.
 // envOverrides injects extra env vars into the session (e.g. ANTHROPIC_BASE_URL for LiteLLM routing).
 // Pass nil to inherit the swarmops process environment unchanged (default, existing behaviour).
-func (s *Services) RunTask(ctx context.Context, name, directory string, mission *string, model, profile, taskBrief string, envOverrides map[string]string) (*Session, error) {
+func (s *Services) RunTask(ctx context.Context, name, directory string, mission *string, model, taskBrief string, envOverrides map[string]string) (*Session, error) {
 	if name == "" {
 		name = "session-" + generateID()
 	}
@@ -105,16 +104,15 @@ func (s *Services) RunTask(ctx context.Context, name, directory string, mission 
 			return nil, fmt.Errorf("write TASK.md: %w", err)
 		}
 	}
-	return spawnSession(ctx, name, directory, mission, model, profile, envOverrides)
+	return spawnSession(ctx, name, directory, mission, model, envOverrides)
 }
 
 // SpawnAgent atomically creates a git worktree, writes an optional TASK.md,
 // and spawns a Claude Code session inside the worktree.
 // On any failure after worktree creation, the worktree is removed (rollback).
-// profile is deprecated and ignored (happier removed).
 // envOverrides injects extra env vars into the session (e.g. ANTHROPIC_BASE_URL for LiteLLM routing).
 // Pass nil to inherit the swarmops process environment unchanged (default, existing behaviour).
-func (s *Services) SpawnAgent(ctx context.Context, name, repoPath, worktreePath, branch string, mission *string, model, profile, taskBrief string, envOverrides map[string]string) (*Session, error) {
+func (s *Services) SpawnAgent(ctx context.Context, name, repoPath, worktreePath, branch string, mission *string, model, taskBrief string, envOverrides map[string]string) (*Session, error) {
 	if name == "" {
 		name = "agent-" + generateID()
 	}
@@ -136,7 +134,7 @@ func (s *Services) SpawnAgent(ctx context.Context, name, repoPath, worktreePath,
 		}
 	}
 
-	sess, err := spawnSession(ctx, name, worktreePath, mission, model, profile, envOverrides)
+	sess, err := spawnSession(ctx, name, worktreePath, mission, model, envOverrides)
 	if err != nil {
 		// spawnSession handles its own internal DB rollback; we only need to clean up the worktree.
 		// Also defensively attempt DB cleanup in case spawnSession left a partial record.
@@ -175,10 +173,6 @@ func (s *Services) TeardownAgent(ctx context.Context, id string, deleteBranch bo
 
 func (s *Services) UpdateSessionMission(ctx context.Context, id, mission string) error {
 	return updateSessionMission(ctx, id, mission)
-}
-
-func (s *Services) UpdateSessionProfile(ctx context.Context, id, profile string) error {
-	return updateSessionProfile(ctx, id, profile)
 }
 
 func (s *Services) UpdateSessionDirectory(ctx context.Context, id, directory string) error {

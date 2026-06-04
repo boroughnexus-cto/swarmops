@@ -86,8 +86,8 @@ func injectRestorePrompt(s Session, delay time.Duration) {
 func buildClaudeRestoreArgs(ctx context.Context, s *Session) []string {
 	// Resume the prior conversation by its persisted session id. Sessions created
 	// in native mode have a UUID --session-id; resume them with --resume. Legacy
-	// sessions with a non-UUID id (e.g. happier-era) start a fresh conversation —
-	// their history is still on disk and can be reopened with /resume in-session.
+	// sessions with a non-UUID id start a fresh conversation — their history is
+	// still on disk and can be reopened with /resume in-session.
 	args := []string{"claude"}
 	args = append(args, remoteControlArgs(s.Name)...)
 	args = append(args, "--dangerously-skip-permissions")

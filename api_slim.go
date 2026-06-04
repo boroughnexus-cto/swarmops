@@ -220,7 +220,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		if req.Directory == "" {
 			req.Directory = "."
 		}
-		s, err := spawnSession(ctx, req.Name, req.Directory, nil, req.Model, "", nil)
+		s, err := spawnSession(ctx, req.Name, req.Directory, nil, req.Model, nil)
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
 			return
@@ -409,7 +409,6 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 				Directory    string            `json:"directory"`
 				Mission      *string           `json:"mission"`
 				Model        string            `json:"model"`
-				Profile      string            `json:"profile"`
 				EnvOverrides map[string]string `json:"env_overrides"`
 			}
 			json.NewDecoder(r.Body).Decode(&req)
@@ -420,7 +419,7 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 			if req.Directory == "" {
 				req.Directory = "."
 			}
-			s, err := spawnSession(ctx, req.Name, req.Directory, req.Mission, req.Model, req.Profile, req.EnvOverrides)
+			s, err := spawnSession(ctx, req.Name, req.Directory, req.Mission, req.Model, req.EnvOverrides)
 			if err != nil {
 				http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
 				return
@@ -458,7 +457,6 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 			var body struct {
 				Name      string  `json:"name"`
 				Mission   *string `json:"mission"`
-				Profile   *string `json:"profile"`
 				Directory *string `json:"directory"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -471,8 +469,8 @@ func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.
 					return
 				}
 			}
-			if body.Mission != nil || body.Profile != nil || body.Directory != nil {
-				if err := updateSessionFields(ctx, sessionID, body.Profile, body.Directory, body.Mission); err != nil {
+			if body.Mission != nil || body.Directory != nil {
+				if err := updateSessionFields(ctx, sessionID, body.Directory, body.Mission); err != nil {
 					http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
 					return
 				}
@@ -629,7 +627,7 @@ func handleSmartSpawnAPI(w http.ResponseWriter, r *http.Request, ctx context.Con
 		home, _ := os.UserHomeDir()
 		name := sanitizeSessionName(req.Goal)
 		mission := req.Goal
-		s, err := spawnSession(ctx, name, home, &mission, "", "", nil)
+		s, err := spawnSession(ctx, name, home, &mission, "", nil)
 		if err != nil {
 			result.Error = err.Error()
 		} else {
@@ -664,7 +662,7 @@ func handleSmartSpawnAPI(w http.ResponseWriter, r *http.Request, ctx context.Con
 		name = name[:30]
 	}
 	mission := req.Goal
-	s, err := globalServices.SpawnAgent(ctx, name, targetRepo.LocalPath, "", "", &mission, "", "", req.Goal, nil)
+	s, err := globalServices.SpawnAgent(ctx, name, targetRepo.LocalPath, "", "", &mission, "", req.Goal, nil)
 	if err != nil {
 		result.Error = err.Error()
 	} else {
