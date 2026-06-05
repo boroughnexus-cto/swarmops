@@ -92,6 +92,7 @@ log "building $NEW_SHA"
 make build
 
 log "restarting service"
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
 systemctl --user restart swarmops
 
 if health_check; then
@@ -114,6 +115,7 @@ git reset --hard "$OLD_SHA" # restore tracked files so sources match the restore
 git clean -fd
 cp -f swarmops.prev swarmops
 cp -f quota-proxy.prev quota-proxy
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
 if ! systemctl --user restart swarmops; then
 	audit "ROLLBACK restart FAILED after $NEW_SHA — service down"
 	log "rollback restart failed — service down, manual intervention required"
