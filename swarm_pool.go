@@ -247,8 +247,8 @@ type PoolManager struct {
 	wg     sync.WaitGroup
 
 	// Keepalive idle tracking
-	startedAt         int64        // Unix timestamp of pool creation; baseline before first keypress
-	lastInteractionAt atomic.Int64 // Unix timestamp of last TUI keypress; 0 = never
+	startedAt         int64         // Unix timestamp of pool creation; baseline before first keypress
+	lastInteractionAt atomic.Int64  // Unix timestamp of last TUI keypress; 0 = never
 	keepaliveWake     chan struct{} // buffered(1); signals immediate keepalive on idle→active transition
 }
 

@@ -2116,7 +2116,6 @@ func (m tuiModel) renderSidebar() string {
 		}
 	}
 
-
 	if len(m.items) == 0 {
 		lines = append(lines, dimStyle.Render(" (no sessions)"))
 	}
