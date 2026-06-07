@@ -245,6 +245,11 @@ type PoolManager struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	// Keepalive idle tracking
+	startedAt         int64         // Unix timestamp of pool creation; baseline before first keypress
+	lastInteractionAt atomic.Int64  // Unix timestamp of last TUI keypress; 0 = never
+	keepaliveWake     chan struct{} // buffered(1); signals immediate keepalive on idle→active transition
 }
 
 var globalPool *PoolManager
@@ -254,12 +259,14 @@ var poolClaudeMDOnce sync.Once
 func NewPoolManager(ctx context.Context, db *sql.DB, config PoolConfig) *PoolManager {
 	pctx, cancel := context.WithCancel(ctx)
 	pm := &PoolManager{
-		slots:     make(map[string][]*PoolSlot),
-		available: make(map[string]chan *PoolSlot),
-		config:    config,
-		db:        db,
-		ctx:       pctx,
-		cancel:    cancel,
+		slots:         make(map[string][]*PoolSlot),
+		available:     make(map[string]chan *PoolSlot),
+		config:        config,
+		db:            db,
+		ctx:           pctx,
+		cancel:        cancel,
+		startedAt:     time.Now().Unix(),
+		keepaliveWake: make(chan struct{}, 1),
 	}
 
 	for _, model := range config.Models {
@@ -281,6 +288,10 @@ func NewPoolManager(ctx context.Context, db *sql.DB, config PoolConfig) *PoolMan
 	// Start health monitor
 	pm.wg.Add(1)
 	go pm.healthMonitor()
+
+	// Start keepalive loop — fires a haiku request every 5 min to refresh quota proxy data
+	pm.wg.Add(1)
+	go pm.keepaliveLoop()
 
 	log.Printf("pool: started with %d models, slots/model: default=%d overrides=%v", len(config.Models), config.SlotsPerModel, config.SlotsPerModelOvr)
 	return pm
@@ -332,6 +343,8 @@ func (pm *PoolManager) spawnSlot(model, slotID string) (*PoolSlot, error) {
 	)
 	cmd.Dir = workDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	// Route all API calls through the quota proxy sidecar so rate-limit headers are captured.
+	cmd.Env = append(os.Environ(), "ANTHROPIC_BASE_URL=http://localhost:8082")
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -559,6 +572,123 @@ func (pm *PoolManager) healthMonitor() {
 			return
 		case <-ticker.C:
 			pm.checkHealth()
+		}
+	}
+}
+
+const (
+	keepaliveModel       = "claude-haiku-4-5"
+	keepaliveInterval    = 5 * time.Minute
+	keepaliveIdleTimeout = 1 * time.Hour
+)
+
+// NoteInteraction records a TUI keypress. If the TUI was idle for >1h, it signals
+// keepaliveLoop to fire an immediate keepalive so quota data is fresh on return.
+func (pm *PoolManager) NoteInteraction() {
+	now := time.Now().Unix()
+	prev := pm.lastInteractionAt.Swap(now)
+	// Determine the baseline: use startedAt if user has never pressed a key
+	baseline := prev
+	if baseline == 0 {
+		baseline = pm.startedAt
+	}
+	if time.Duration(now-baseline)*time.Second > keepaliveIdleTimeout {
+		select {
+		case pm.keepaliveWake <- struct{}{}:
+		default: // already pending
+		}
+	}
+}
+
+// keepaliveLoop fires a minimal haiku request every 5 minutes to keep the quota proxy
+// data fresh. Skips pings after 1 hour of no TUI interaction; resumes immediately when
+// the user returns (NoteInteraction signals keepaliveWake).
+func (pm *PoolManager) keepaliveLoop() {
+	defer pm.wg.Done()
+
+	// fire immediately on start so quota is populated before first TUI render
+	pm.sendKeepalive(keepaliveModel)
+
+	ticker := time.NewTicker(keepaliveInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-pm.ctx.Done():
+			return
+		case <-pm.keepaliveWake:
+			// user returned after idle period — refresh immediately
+			pm.sendKeepalive(keepaliveModel)
+		case <-ticker.C:
+			// determine activity baseline: last keypress, or startup if never used
+			baseline := pm.lastInteractionAt.Load()
+			if baseline == 0 {
+				baseline = pm.startedAt
+			}
+			if time.Now().Unix()-baseline > int64(keepaliveIdleTimeout.Seconds()) {
+				log.Printf("pool: keepalive: skipping (TUI idle >%v)", keepaliveIdleTimeout)
+				continue
+			}
+			pm.sendKeepalive(keepaliveModel)
+		}
+	}
+}
+
+// sendKeepalive acquires a haiku slot, sends a single-token prompt, and drains the
+// response. Purpose: trigger an API call routed through the quota proxy sidecar so
+// rate-limit headers are captured and QuotaData is refreshed.
+func (pm *PoolManager) sendKeepalive(model string) {
+	ctx, cancel := context.WithTimeout(pm.ctx, 30*time.Second)
+	defer cancel()
+
+	slot, err := pm.Acquire(ctx, model)
+	if err != nil {
+		log.Printf("pool: keepalive: acquire %s: %v", model, err)
+		return
+	}
+	defer pm.Release(slot)
+
+	markDead := func() {
+		slot.mu.Lock()
+		slot.state = slotDead
+		slot.mu.Unlock()
+	}
+
+	if err := slot.sendQuery("k"); err != nil {
+		log.Printf("pool: keepalive: send: %v", err)
+		markDead()
+		return
+	}
+
+	deadline := time.After(25 * time.Second)
+	for {
+		evCh := make(chan poolEvent, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			ev, err := slot.readEvent()
+			if err != nil {
+				errCh <- err
+			} else {
+				evCh <- ev
+			}
+		}()
+		select {
+		case ev := <-evCh:
+			if ev.Type == "result" {
+				return // slot is healthy; Release will return it to pool
+			}
+		case err := <-errCh:
+			log.Printf("pool: keepalive: read: %v", err)
+			markDead() // goroutine exited with error; slot unusable
+			return
+		case <-deadline:
+			// goroutine still blocking on readEvent; mark dead so Release recycles
+			// the slot (closing its pipes), which will eventually unblock the goroutine
+			log.Printf("pool: keepalive: timeout")
+			markDead()
+			return
+		case <-pm.ctx.Done():
+			markDead()
+			return
 		}
 	}
 }
