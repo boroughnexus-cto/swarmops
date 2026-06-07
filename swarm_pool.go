@@ -245,6 +245,11 @@ type PoolManager struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	// Keepalive idle tracking
+	startedAt         int64        // Unix timestamp of pool creation; baseline before first keypress
+	lastInteractionAt atomic.Int64 // Unix timestamp of last TUI keypress; 0 = never
+	keepaliveWake     chan struct{} // buffered(1); signals immediate keepalive on idle→active transition
 }
 
 var globalPool *PoolManager
@@ -254,12 +259,14 @@ var poolClaudeMDOnce sync.Once
 func NewPoolManager(ctx context.Context, db *sql.DB, config PoolConfig) *PoolManager {
 	pctx, cancel := context.WithCancel(ctx)
 	pm := &PoolManager{
-		slots:     make(map[string][]*PoolSlot),
-		available: make(map[string]chan *PoolSlot),
-		config:    config,
-		db:        db,
-		ctx:       pctx,
-		cancel:    cancel,
+		slots:         make(map[string][]*PoolSlot),
+		available:     make(map[string]chan *PoolSlot),
+		config:        config,
+		db:            db,
+		ctx:           pctx,
+		cancel:        cancel,
+		startedAt:     time.Now().Unix(),
+		keepaliveWake: make(chan struct{}, 1),
 	}
 
 	for _, model := range config.Models {
@@ -569,12 +576,35 @@ func (pm *PoolManager) healthMonitor() {
 	}
 }
 
+const (
+	keepaliveModel       = "claude-haiku-4-5"
+	keepaliveInterval    = 5 * time.Minute
+	keepaliveIdleTimeout = 1 * time.Hour
+)
+
+// NoteInteraction records a TUI keypress. If the TUI was idle for >1h, it signals
+// keepaliveLoop to fire an immediate keepalive so quota data is fresh on return.
+func (pm *PoolManager) NoteInteraction() {
+	now := time.Now().Unix()
+	prev := pm.lastInteractionAt.Swap(now)
+	// Determine the baseline: use startedAt if user has never pressed a key
+	baseline := prev
+	if baseline == 0 {
+		baseline = pm.startedAt
+	}
+	if time.Duration(now-baseline)*time.Second > keepaliveIdleTimeout {
+		select {
+		case pm.keepaliveWake <- struct{}{}:
+		default: // already pending
+		}
+	}
+}
+
 // keepaliveLoop fires a minimal haiku request every 5 minutes to keep the quota proxy
-// data fresh. The proxy intercepts the API call and updates session/weekly utilization.
+// data fresh. Skips pings after 1 hour of no TUI interaction; resumes immediately when
+// the user returns (NoteInteraction signals keepaliveWake).
 func (pm *PoolManager) keepaliveLoop() {
 	defer pm.wg.Done()
-	const keepaliveModel = "claude-haiku-4-5"
-	const keepaliveInterval = 5 * time.Minute
 
 	// fire immediately on start so quota is populated before first TUI render
 	pm.sendKeepalive(keepaliveModel)
@@ -585,7 +615,19 @@ func (pm *PoolManager) keepaliveLoop() {
 		select {
 		case <-pm.ctx.Done():
 			return
+		case <-pm.keepaliveWake:
+			// user returned after idle period — refresh immediately
+			pm.sendKeepalive(keepaliveModel)
 		case <-ticker.C:
+			// determine activity baseline: last keypress, or startup if never used
+			baseline := pm.lastInteractionAt.Load()
+			if baseline == 0 {
+				baseline = pm.startedAt
+			}
+			if time.Now().Unix()-baseline > int64(keepaliveIdleTimeout.Seconds()) {
+				log.Printf("pool: keepalive: skipping (TUI idle >%v)", keepaliveIdleTimeout)
+				continue
+			}
 			pm.sendKeepalive(keepaliveModel)
 		}
 	}

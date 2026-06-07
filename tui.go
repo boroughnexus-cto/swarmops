@@ -818,6 +818,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
+		if globalPool != nil {
+			globalPool.NoteInteraction()
+		}
 		return m.handleKey(msg)
 	}
 
