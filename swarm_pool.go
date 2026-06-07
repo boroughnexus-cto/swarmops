@@ -282,6 +282,10 @@ func NewPoolManager(ctx context.Context, db *sql.DB, config PoolConfig) *PoolMan
 	pm.wg.Add(1)
 	go pm.healthMonitor()
 
+	// Start keepalive loop — fires a haiku request every 5 min to refresh quota proxy data
+	pm.wg.Add(1)
+	go pm.keepaliveLoop()
+
 	log.Printf("pool: started with %d models, slots/model: default=%d overrides=%v", len(config.Models), config.SlotsPerModel, config.SlotsPerModelOvr)
 	return pm
 }
@@ -332,6 +336,8 @@ func (pm *PoolManager) spawnSlot(model, slotID string) (*PoolSlot, error) {
 	)
 	cmd.Dir = workDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	// Route all API calls through the quota proxy sidecar so rate-limit headers are captured.
+	cmd.Env = append(os.Environ(), "ANTHROPIC_BASE_URL=http://localhost:8082")
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -559,6 +565,88 @@ func (pm *PoolManager) healthMonitor() {
 			return
 		case <-ticker.C:
 			pm.checkHealth()
+		}
+	}
+}
+
+// keepaliveLoop fires a minimal haiku request every 5 minutes to keep the quota proxy
+// data fresh. The proxy intercepts the API call and updates session/weekly utilization.
+func (pm *PoolManager) keepaliveLoop() {
+	defer pm.wg.Done()
+	const keepaliveModel = "claude-haiku-4-5"
+	const keepaliveInterval = 5 * time.Minute
+
+	// fire immediately on start so quota is populated before first TUI render
+	pm.sendKeepalive(keepaliveModel)
+
+	ticker := time.NewTicker(keepaliveInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-pm.ctx.Done():
+			return
+		case <-ticker.C:
+			pm.sendKeepalive(keepaliveModel)
+		}
+	}
+}
+
+// sendKeepalive acquires a haiku slot, sends a single-token prompt, and drains the
+// response. Purpose: trigger an API call routed through the quota proxy sidecar so
+// rate-limit headers are captured and QuotaData is refreshed.
+func (pm *PoolManager) sendKeepalive(model string) {
+	ctx, cancel := context.WithTimeout(pm.ctx, 30*time.Second)
+	defer cancel()
+
+	slot, err := pm.Acquire(ctx, model)
+	if err != nil {
+		log.Printf("pool: keepalive: acquire %s: %v", model, err)
+		return
+	}
+	defer pm.Release(slot)
+
+	markDead := func() {
+		slot.mu.Lock()
+		slot.state = slotDead
+		slot.mu.Unlock()
+	}
+
+	if err := slot.sendQuery("k"); err != nil {
+		log.Printf("pool: keepalive: send: %v", err)
+		markDead()
+		return
+	}
+
+	deadline := time.After(25 * time.Second)
+	for {
+		evCh := make(chan poolEvent, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			ev, err := slot.readEvent()
+			if err != nil {
+				errCh <- err
+			} else {
+				evCh <- ev
+			}
+		}()
+		select {
+		case ev := <-evCh:
+			if ev.Type == "result" {
+				return // slot is healthy; Release will return it to pool
+			}
+		case err := <-errCh:
+			log.Printf("pool: keepalive: read: %v", err)
+			markDead() // goroutine exited with error; slot unusable
+			return
+		case <-deadline:
+			// goroutine still blocking on readEvent; mark dead so Release recycles
+			// the slot (closing its pipes), which will eventually unblock the goroutine
+			log.Printf("pool: keepalive: timeout")
+			markDead()
+			return
+		case <-pm.ctx.Done():
+			markDead()
+			return
 		}
 	}
 }

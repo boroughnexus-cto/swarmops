@@ -2023,6 +2023,28 @@ func (m tuiModel) renderSidebar() string {
 	lines = append(lines, dimStyle.Render(strings.Join(summary, " · ")))
 	lines = append(lines, dimStyle.Render("────────────────────"))
 
+	// Quota display: inline text with reset countdown, above session list
+	if m.quota != nil {
+		if w := m.quota.Session5h; w != nil {
+			pct := int(w.Utilization * 100)
+			reset := formatTimeUntil(w.ResetEpoch)
+			line := fmt.Sprintf("5h %3d%%", pct)
+			if reset != "" {
+				line += " · " + reset
+			}
+			lines = append(lines, dimStyle.Render(line))
+		}
+		if w := m.quota.Weekly7d; w != nil {
+			pct := int(w.Utilization * 100)
+			reset := formatTimeUntil(w.ResetEpoch)
+			line := fmt.Sprintf("7d %3d%%", pct)
+			if reset != "" {
+				line += " · " + reset
+			}
+			lines = append(lines, dimStyle.Render(line))
+		}
+	}
+
 	lines = append(lines, "")
 
 	// Render session items
@@ -2091,30 +2113,6 @@ func (m tuiModel) renderSidebar() string {
 		}
 	}
 
-	// Quota meters (from quota-proxy)
-	if m.quota != nil {
-		barW := m.sidebarInnerWidth() - 9 // leave room for label "5h: " + " 100%" suffix
-		if barW < 4 {
-			barW = 4
-		}
-		renderBar := func(label string, w *WindowData) string {
-			if w == nil {
-				return ""
-			}
-			filled := int(float64(barW) * w.Utilization)
-			if filled > barW {
-				filled = barW
-			}
-			bar := strings.Repeat("█", filled) + strings.Repeat("░", barW-filled)
-			return fmt.Sprintf("%s %s %d%%", label, bar, int(w.Utilization*100))
-		}
-		if line := renderBar("5h:", m.quota.Session5h); line != "" {
-			lines = append(lines, dimStyle.Render(line))
-		}
-		if line := renderBar("7d:", m.quota.Weekly7d); line != "" {
-			lines = append(lines, dimStyle.Render(line))
-		}
-	}
 
 	if len(m.items) == 0 {
 		lines = append(lines, dimStyle.Render(" (no sessions)"))
@@ -2543,13 +2541,36 @@ func sidebarWidthPath() string {
 	return filepath.Join(os.Getenv("HOME"), ".swarmops", "sidebar-width")
 }
 
+// formatTimeUntil returns a human-readable duration until the given Unix epoch.
+// Returns "Xd Xh" for >24h, "Xh Xm" for >1h, "Xm" otherwise. Empty string if past or zero.
+func formatTimeUntil(epoch int64) string {
+	if epoch == 0 {
+		return ""
+	}
+	d := time.Until(time.Unix(epoch, 0))
+	if d <= 0 {
+		return ""
+	}
+	total := int(d.Minutes())
+	days := total / (60 * 24)
+	hours := (total % (60 * 24)) / 60
+	mins := total % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh", days, hours)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, mins)
+	}
+	return fmt.Sprintf("%dm", mins)
+}
+
 func loadSidebarWidth() int {
 	path := sidebarWidthPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 40 // default to max width
+		return 30 // default: 25% narrower than max (40→30)
 	}
-	w := 40
+	w := 30
 	fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &w)
 	if w < 18 {
 		w = 18
