@@ -939,9 +939,15 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					time.Sleep(500 * time.Millisecond)
 					// Fresh native claude session (new session-id = no history).
 					newID := generateUUID()
-					parts := []string{"claude"}
-					parts = append(parts, remoteControlArgs(item.label)...)
-					parts = append(parts, "--session-id", newID, "--dangerously-skip-permissions", "--model", effectiveModel(item.model))
+					// effectiveModel resolves a concrete model so a fresh restart
+					// never falls back to claude's own (expensive) default — this
+					// is the one fresh path that always pins --model.
+					parts := interactiveClaudeArgs(interactiveClaudeOpts{
+						name:      item.label,
+						mode:      claudeFresh,
+						sessionID: newID,
+						modelFlag: effectiveModel(item.model),
+					})
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, strings.Join(parts, " "), "Enter").Run()
 					updateClaudeSessionID(context.Background(), item.sessionID, newID)
 					m.flash = fmt.Sprintf("Restarted Claude in %s", item.label)
@@ -2527,16 +2533,12 @@ func swapNestedTmuxPrefix() (func(), func()) {
 // non-UUID id (legacy) start a fresh conversation — their history is still on
 // disk and can be reopened with /resume in-session.
 func resumeClaudeCmd(claudeID, model, name string) []string {
-	args := []string{"claude"}
-	args = append(args, remoteControlArgs(name)...)
-	args = append(args, "--dangerously-skip-permissions")
-	if claudeID != "" && isValidUUID(claudeID) {
-		args = append(args, "--resume", claudeID)
-	}
-	if model != "" {
-		args = append(args, "--model", model)
-	}
-	return args
+	return interactiveClaudeArgs(interactiveClaudeOpts{
+		name:      name,
+		mode:      claudeResume,
+		sessionID: claudeID,
+		modelFlag: model,
+	})
 }
 
 func sidebarWidthPath() string {

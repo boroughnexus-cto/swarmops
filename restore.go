@@ -88,19 +88,20 @@ func buildClaudeRestoreArgs(ctx context.Context, s *Session) []string {
 	// in native mode have a UUID --session-id; resume them with --resume. Legacy
 	// sessions with a non-UUID id start a fresh conversation — their history is
 	// still on disk and can be reopened with /resume in-session.
-	args := []string{"claude"}
-	args = append(args, remoteControlArgs(s.Name)...)
-	args = append(args, "--dangerously-skip-permissions")
-	if s.ClaudeSessionID != nil && isValidUUID(*s.ClaudeSessionID) {
-		args = append(args, "--resume", *s.ClaudeSessionID)
+	claudeID := ""
+	if s.ClaudeSessionID != nil {
+		claudeID = *s.ClaudeSessionID
 	}
-	// Re-apply the per-session MCP subset if one was set at spawn, so a restored
-	// session doesn't come back with the full ~50-server catalogue.
-	if p := restrictedMCPConfigPath(s.ID); p != "" {
-		args = append(args, "--strict-mcp-config", "--mcp-config", p)
-	}
-	// Model is passed via ANTHROPIC_MODEL in restoreEnvFor.
-	return args
+	// modelFlag is intentionally omitted: restore supplies the model via the
+	// ANTHROPIC_MODEL env var (see restoreEnvFor). mcpConfig re-applies the
+	// per-session MCP subset set at spawn, so a restored session doesn't come
+	// back with the full ~50-server catalogue.
+	return interactiveClaudeArgs(interactiveClaudeOpts{
+		name:      s.Name,
+		mode:      claudeResume,
+		sessionID: claudeID,
+		mcpConfig: restrictedMCPConfigPath(s.ID),
+	})
 }
 
 // restoreEnvFor returns the env vars that should be re-injected when a

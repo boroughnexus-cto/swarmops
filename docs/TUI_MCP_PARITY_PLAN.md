@@ -1,8 +1,16 @@
 # TUI / MCP Session Parity — Audit & Plan
 
-**Status:** Plan only (no code changes in this PR)
+**Status:** Part A (fragility fix) **implemented** in this PR; Parts B–D remain proposals.
 **Author:** automated audit
 **Scope:** Unify TUI-created and MCP-created SwarmOps sessions per Simon's 5 requirements.
+
+> **Update:** The primary fragility identified below — five hand-rolled `claude`
+> argv builders that could silently drift — has been **fixed** in this PR. All
+> interactive paths now route through a single `interactiveClaudeArgs` helper, and
+> the `--dangerously-skip-permissions` literal lives in exactly one `const`. Golden
+> + invariant tests pin the behaviour. See **Part A** (marked ✅ DONE) for details.
+> Parts B (TUI worktree spawn), C (nil-DB spawner guard), and D (docs) are still
+> open proposals.
 
 ---
 
@@ -85,7 +93,7 @@ parity — but the plan notes it explicitly so it isn't mistaken for a divergenc
 
 ## The genuine remaining work
 
-### A. (Primary) Collapse the five `claude` command builders into one source of truth
+### A. (Primary) Collapse the five `claude` command builders into one source of truth — ✅ DONE in this PR
 **Problem:** Requirement #2 ("no exceptions") is currently satisfied by coincidence — five separate
 functions each hand-append `--dangerously-skip-permissions` and the Remote Control flags. If a future
 edit touches one and misses another, parity silently breaks. The duplicated builders are:
@@ -112,6 +120,23 @@ it. Define `const dangerouslySkipPermissions = "--dangerously-skip-permissions"`
 
 **Why this is the right primary change:** it converts requirement #2 from "true today" into
 "true by construction," and it removes the only real way the TUI and MCP paths can diverge going forward.
+
+**As implemented (this PR):**
+- `spawn.go` — added `const dangerouslySkipPermissions`, a `claudeFresh` / `claudeResume`
+  mode enum, `interactiveClaudeOpts`, and `interactiveClaudeArgs`. `spawnSession` now calls it.
+- `restore.go` `buildClaudeRestoreArgs`, `tui.go` `resumeClaudeCmd`, and the `tui.go` alt+S
+  fresh-restart block now all call the shared helper.
+- `swarm_pool.go` references the shared `const` for the flag literal (headless pool keeps its
+  own command shape — it is not interactive — but can no longer disagree on the flag spelling).
+- Peer-review refinements adopted: an explicit **mode enum** (not a `resume bool`); a
+  `modelFlag` field with an explicit "model via ANTHROPIC_MODEL on restore" comment; and the
+  **exact original argv ordering preserved** (`--session-id … --dangerously-skip-permissions`
+  on fresh) so this is a behaviour-preserving refactor. `remoteControlArgs` was intentionally
+  left unchanged (switching to `--remote-control=<name>` would be a gratuitous behaviour change).
+- Tests: `TestInteractiveClaudeArgsGolden` pins exact argv for all fresh/resume permutations;
+  `TestInteractiveClaudeArgsInvariants` asserts every interactive call site emits
+  `--dangerously-skip-permissions` (always, even under the RC kill-switch) and Remote Control by
+  default. Existing `TestResumeClaudeCmdNative` / `TestRemoteControlArgs` still pass unchanged.
 
 ### B. (Secondary) Let the TUI spawn worktree-backed agents (true #1 parity)
 **Asymmetry:** MCP can create a **worktree-isolated** agent (`swop_spawn_agent` → `SpawnAgent`), but the
@@ -196,8 +221,8 @@ Remote Control is ever off.
 
 ## Verification checklist (post-implementation)
 
-- [ ] `grep -rn "dangerously-skip-permissions" --include=*.go` returns exactly **one** definition site
-      (the const) plus the shared builder.
+- [x] `grep -rn '"--dangerously-skip-permissions"' --include=*.go` (non-test) returns exactly **one**
+      site — the `const` in `spawn.go`. All other usages reference the const. *(Done — Part A.)*
 - [ ] A session created via `swop_run_task`, via `swop_spawn_agent`, and via the TUI all show in the TUI
       sidebar with identical indicators and are all driveable by `swop_send_input` / `swop_stop_session`.
 - [ ] Restart (alt+S), resume (`StartSession`), and post-reboot restore all emit Remote Control +

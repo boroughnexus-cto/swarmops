@@ -336,7 +336,9 @@ func (pm *PoolManager) spawnSlot(model, slotID string) (*PoolSlot, error) {
 		"--output-format", "stream-json",
 		"--verbose",
 		"--model", model,
-		"--dangerously-skip-permissions",
+		// Pool workers are headless (claude -p, no tmux/Remote Control) but still
+		// carry the same skip-permissions invariant — shared const, see spawn.go.
+		dangerouslySkipPermissions,
 		"--no-session-persistence",
 		"--strict-mcp-config",
 		"--mcp-config", mcpConfig,

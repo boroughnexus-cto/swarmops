@@ -65,6 +65,69 @@ func remoteControlArgs(name string) []string {
 	return []string{"--remote-control", name}
 }
 
+// dangerouslySkipPermissions is the claude flag that bypasses approval prompts.
+// It is a hard invariant that EVERY SwarmOps-managed claude process carries it
+// (interactive tmux sessions and headless pool workers alike). Referencing this
+// single const — rather than re-typing the literal — means a grep for the flag
+// lands in exactly one definition site, and no spawn/restore/resume path can
+// silently drop it.
+const dangerouslySkipPermissions = "--dangerously-skip-permissions"
+
+// interactiveClaudeMode selects how a tmux-hosted claude process attaches to its
+// conversation: a fresh one (new --session-id) or a resumed one (--resume <id>).
+type interactiveClaudeMode int
+
+const (
+	// claudeFresh starts a brand-new conversation under a fixed --session-id so
+	// it can be resumed later (used by spawn and by the TUI fresh-restart path).
+	claudeFresh interactiveClaudeMode = iota
+	// claudeResume reattaches to a prior conversation via --resume (used by
+	// post-reboot restore and the TUI resume / StartSession path). The resume
+	// flag is only emitted when sessionID is a valid UUID; legacy non-UUID ids
+	// start fresh (their history is still reachable via /resume in-session).
+	claudeResume
+)
+
+// interactiveClaudeOpts configures interactiveClaudeArgs.
+type interactiveClaudeOpts struct {
+	name      string               // session/display name → --remote-control <name>
+	mode      interactiveClaudeMode
+	sessionID string               // fresh: --session-id value; resume: --resume value (if valid UUID)
+	modelFlag string               // "" omits --model. Restore intentionally leaves this empty and supplies the model via the ANTHROPIC_MODEL env var instead (see restoreEnvFor).
+	mcpConfig string               // "" omits --strict-mcp-config/--mcp-config; else the per-session restricted MCP config path.
+}
+
+// interactiveClaudeArgs is the single source of truth for the argv of an
+// interactive (tmux-hosted) claude session. Every interactive path — fresh
+// spawn, post-reboot restore, TUI resume, TUI fresh-restart — builds its command
+// here so the two security/operability invariants (Remote Control on, and
+// --dangerously-skip-permissions present) can never drift apart between paths.
+//
+// Argv ordering matches the original hand-rolled builders exactly so this is a
+// pure refactor with no behavioural change (golden tests pin the output).
+func interactiveClaudeArgs(o interactiveClaudeOpts) []string {
+	args := []string{"claude"}
+	args = append(args, remoteControlArgs(o.name)...)
+
+	switch o.mode {
+	case claudeFresh:
+		args = append(args, "--session-id", o.sessionID, dangerouslySkipPermissions)
+	case claudeResume:
+		args = append(args, dangerouslySkipPermissions)
+		if isValidUUID(o.sessionID) {
+			args = append(args, "--resume", o.sessionID)
+		}
+	}
+
+	if o.mcpConfig != "" {
+		args = append(args, "--strict-mcp-config", "--mcp-config", o.mcpConfig)
+	}
+	if o.modelFlag != "" {
+		args = append(args, "--model", o.modelFlag)
+	}
+	return args
+}
+
 // spawnSession creates a new tmux session and launches claude inside it.
 // Sessions are launched with a persisted --session-id so the conversation can
 // be resumed (claude --resume <id>) after a swarmops restart, and are controlled
@@ -138,15 +201,13 @@ func spawnSession(ctx context.Context, name, directory string, mission *string, 
 	// can be resumed (claude --resume <id>) after a swarmops restart. Remote
 	// Control is enabled (named after the session) on every spawn.
 	claudeUUID := generateUUID()
-	sessionCmd := []string{"claude"}
-	sessionCmd = append(sessionCmd, remoteControlArgs(name)...)
-	sessionCmd = append(sessionCmd, "--session-id", claudeUUID, "--dangerously-skip-permissions")
-	if restrictedMCPPath != "" {
-		sessionCmd = append(sessionCmd, "--strict-mcp-config", "--mcp-config", restrictedMCPPath)
-	}
-	if model != "" {
-		sessionCmd = append(sessionCmd, "--model", model)
-	}
+	sessionCmd := interactiveClaudeArgs(interactiveClaudeOpts{
+		name:      name,
+		mode:      claudeFresh,
+		sessionID: claudeUUID,
+		modelFlag: model,
+		mcpConfig: restrictedMCPPath,
+	})
 
 	tmuxArgs := []string{"new-session", "-d",
 		"-s", s.TmuxSession,
