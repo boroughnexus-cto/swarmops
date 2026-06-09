@@ -1,6 +1,6 @@
 # TUI / MCP Session Parity — Audit & Plan
 
-**Status:** Parts A (fragility fix) and C (nil-DB guard) **implemented** in this PR; Parts B and D remain proposals.
+**Status:** Parts A (fragility fix), B (TUI worktree-agent spawn), and C (nil-DB guard) **implemented** in this PR; Part D (docs note) remains a proposal.
 **Author:** automated audit
 **Scope:** Unify TUI-created and MCP-created SwarmOps sessions per Simon's 5 requirements.
 
@@ -140,7 +140,7 @@ it. Define `const dangerouslySkipPermissions = "--dangerously-skip-permissions"`
   `--dangerously-skip-permissions` (always, even under the RC kill-switch) and Remote Control by
   default. Existing `TestResumeClaudeCmdNative` / `TestRemoteControlArgs` still pass unchanged.
 
-### B. (Secondary) Let the TUI spawn worktree-backed agents (true #1 parity)
+### B. (Secondary) Let the TUI spawn worktree-backed agents (true #1 parity) — ✅ DONE in this PR
 **Asymmetry:** MCP can create a **worktree-isolated** agent (`swop_spawn_agent` → `SpawnAgent`), but the
 TUI's "new session" only hits `POST /api/swarm/sessions` → `spawnSession` (no worktree). So one capability
 exists on MCP that the TUI cannot reach. If "TUI and MCP identical" is read strictly, this is the one
@@ -156,6 +156,33 @@ real behavioral gap.
 **Trade-off:** adds UI surface and a new endpoint. If Simon considers worktree-spawn an
 MCP-/automation-only feature, skip B and instead document that the TUI intentionally creates
 in-place (non-worktree) sessions.
+
+**As implemented (this PR):**
+- `api_slim.go` — `POST /api/swarm/agents` (`handleSwarmAgentsAPI`) → `globalServices.SpawnAgent`.
+  `repo_path` required; `worktree_path`/`branch` auto-generate when empty. Symmetric with the
+  existing `POST /api/swarm/sessions` handler.
+- `tui_client.go` — `SpawnAgent` added to the `swarmClient` interface and implemented on
+  `apiClient` (30s timeout to cover git worktree creation).
+- `tui.go` — revived the previously-orphaned name→dir→mission→model wizard as the **manual agent**
+  flow behind a new `Alt+C` key, gated by a `creatingAgent` flag. In agent mode the "directory"
+  field is the **git repo path** (labelled `Repo:`), and the mission doubles as the TASK.md
+  `task_brief` so the agent starts with its instructions on disk. `doSpawn` routes to
+  `m.api.SpawnAgent`; `creatingAgent` resets on finish and on every wizard `esc`. Footer help and
+  the model picker are reused as-is. The brain-routed smart-spawn (`Alt+N`) already created
+  worktree agents; this adds the **explicit-repo** path that matched `swop_spawn_agent` only via MCP
+  before.
+- Teardown reuses the existing `Alt+D` delete (→ `deleteSession`). *Note:* `Alt+D` deletes the
+  session record and kills tmux but does not remove the git worktree — full worktree cleanup is the
+  MCP `swop_teardown_agent` / `Services.TeardownAgent` path. A TUI "teardown agent (remove
+  worktree)" affordance is a reasonable fast-follow but is out of scope here.
+- Tests: `TestAgentSpawnFlow` (Alt+C enters the wizard; `doSpawn` calls `SpawnAgent`, not the plain
+  `Spawn`, and resets state) and `TestAgentSpawnEscResets` (cancel clears `creatingAgent`).
+  `fakeSwarmClient` gained a `SpawnAgent` stub. Existing new-session wizard tests still pass.
+
+**Scope note (strict "identical"):** the manual agent wizard exposes name / repo / mission / model
+(+ backend via the model picker, which carries the `[gpt]`/`[dseek]` LiteLLM routing). It does **not**
+yet expose `swop_spawn_agent`'s `branch`, `worktree_path`, or `mcp_servers` subset — those remain
+MCP-only. Confirm with Simon whether the TUI should reach those too before adding more input steps.
 
 ### C. (Hardening) Make the in-process spawner path safe or remove it — ✅ DONE in this PR
 `initialModel` falls back to `defaultSpawner{}` when `api == nil` (`tui.go:292–297`). In a real client

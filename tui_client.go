@@ -14,6 +14,10 @@ import (
 // The concrete implementation is apiClient (HTTP). Tests use fakeSwarmClient.
 type swarmClient interface {
 	Spawn(ctx context.Context, name, dir string, mission *string, model string, envOverrides map[string]string) (*Session, error)
+	// SpawnAgent creates a git worktree under repoPath and spawns a Claude session
+	// inside it — the TUI equivalent of the MCP swop_spawn_agent tool. taskBrief, if
+	// non-empty, is written to TASK.md in the worktree before the agent starts.
+	SpawnAgent(ctx context.Context, name, repoPath, branch string, mission *string, taskBrief, model string, envOverrides map[string]string) (*Session, error)
 	listSessions() ([]Session, error)
 	deleteSession(id string) error
 	renameSession(id, name string) error
@@ -73,6 +77,61 @@ func (c *apiClient) Spawn(ctx context.Context, name, dir string, mission *string
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var s Session
+	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return &s, nil
+}
+
+// SpawnAgent implements the swarmClient interface via POST /api/swarm/agents,
+// which creates a worktree-isolated agent on the backend (Services.SpawnAgent).
+func (c *apiClient) SpawnAgent(ctx context.Context, name, repoPath, branch string, mission *string, taskBrief, model string, envOverrides map[string]string) (*Session, error) {
+	body := map[string]interface{}{
+		"name":      name,
+		"repo_path": repoPath,
+	}
+	if branch != "" {
+		body["branch"] = branch
+	}
+	if mission != nil {
+		body["mission"] = *mission
+	}
+	if taskBrief != "" {
+		body["task_brief"] = taskBrief
+	}
+	if model != "" {
+		body["model"] = model
+	}
+	if len(envOverrides) > 0 {
+		body["env_overrides"] = envOverrides
+	}
+
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+
+	// Worktree creation + git operations can take a few seconds; allow more than
+	// the default 10s client timeout.
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/swarm/agents", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("http: %w", err)
 	}

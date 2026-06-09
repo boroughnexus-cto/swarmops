@@ -156,6 +156,10 @@ type tuiModel struct {
 	newNameInput    textinput.Model
 	newDirInput     textinput.Model
 	newMissionInput textinput.Model
+	// creatingAgent routes the name→dir→mission→model wizard to SpawnAgent
+	// (worktree-isolated, like swop_spawn_agent) instead of a plain session.
+	// In agent mode the "directory" field is the git repo path.
+	creatingAgent bool
 	newModel        int // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
 	// Edit directory input
 	editDirInput textinput.Model
@@ -866,6 +870,20 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.goalInput.Focus()
 			m.flash = "Smart session — describe your goal (Enter to submit, Esc to cancel)"
 			return m, textinput.Blink
+		case "alt+c":
+			// New worktree agent (manual): name → repo path → mission → model,
+			// then SpawnAgent. The TUI equivalent of MCP swop_spawn_agent.
+			if m.api == nil {
+				m.flash = "Agent spawn needs the backend (client mode)"
+				return m, flashClearCmd()
+			}
+			m.creatingAgent = true
+			m.mode = modeNewName
+			m.newNameInput.SetValue("")
+			m.newNameInput.Focus()
+			m.newDirInput.SetValue("")
+			m.flash = "New worktree agent — enter name (esc to cancel)"
+			return m, textinput.Blink
 		case "alt+d":
 			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
 				item := m.items[m.cursor]
@@ -1101,10 +1119,15 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.newNameInput.Value() != "" {
 				m.mode = modeNewDir
 				m.newDirInput.Focus()
-				m.flash = "New session — enter directory (esc to cancel)"
+				if m.creatingAgent {
+					m.flash = "New agent — enter git repo path (tab to complete, esc to cancel)"
+				} else {
+					m.flash = "New session — enter directory (esc to cancel)"
+				}
 				return m, textinput.Blink
 			}
 		case "esc":
+			m.creatingAgent = false
 			m.mode = modePassthrough
 			m.flash = ""
 		default:
@@ -1119,9 +1142,14 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNewMission
 			m.newMissionInput.SetValue("")
 			m.newMissionInput.Focus()
-			m.flash = "Mission statement (optional, enter to skip)"
+			if m.creatingAgent {
+				m.flash = "Agent mission / task brief (written to TASK.md; enter to skip)"
+			} else {
+				m.flash = "Mission statement (optional, enter to skip)"
+			}
 			return m, textinput.Blink
 		case "esc":
+			m.creatingAgent = false
 			m.mode = modePassthrough
 			m.flash = ""
 		case "tab":
@@ -1179,6 +1207,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.flash = modelPickerFlash(m.newModel)
 			return m, nil
 		case "esc":
+			m.creatingAgent = false
 			m.mode = modePassthrough
 			m.flash = ""
 		default:
@@ -1203,8 +1232,9 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "enter":
 			m.doSpawn()
-			return m, nil
+			return m, tea.Batch(loadItemsCmd(m.api), flashClearCmd())
 		case "esc":
+			m.creatingAgent = false
 			m.mode = modePassthrough
 			m.flash = ""
 		}
@@ -1646,11 +1676,13 @@ func (m *tuiModel) sendKeyToSession(key string) {
 }
 
 func (m *tuiModel) doSpawn() {
+	defer func() {
+		m.creatingAgent = false
+		m.mode = modePassthrough
+	}()
+
 	name := m.newNameInput.Value()
 	dir := m.newDirInput.Value()
-	if dir == "" {
-		dir = os.Getenv("HOME")
-	}
 	var mission *string
 	if v := m.newMissionInput.Value(); v != "" {
 		mission = &v
@@ -1658,6 +1690,35 @@ func (m *tuiModel) doSpawn() {
 	model := modelIDFromIndex(m.newModel)
 	envOverrides := envOverridesFromIndex(m.newModel)
 	name = autoPrefixSessionName(name, model, envOverrides)
+
+	if m.creatingAgent {
+		// Worktree-isolated agent: the "directory" field is the git repo path,
+		// and the mission doubles as the TASK.md brief so the agent has its
+		// instructions on disk. Mirrors MCP swop_spawn_agent.
+		if dir == "" {
+			m.flash = "Agent needs a git repo path"
+			return
+		}
+		if m.api == nil {
+			m.flash = "Agent spawn needs the backend (client mode)"
+			return
+		}
+		taskBrief := ""
+		if mission != nil {
+			taskBrief = *mission
+		}
+		s, err := m.api.SpawnAgent(context.Background(), name, dir, "", mission, taskBrief, model, envOverrides)
+		if err != nil {
+			m.flash = "Agent spawn error: " + err.Error()
+		} else {
+			m.flash = fmt.Sprintf("Spawned agent %s", s.Name)
+		}
+		return
+	}
+
+	if dir == "" {
+		dir = os.Getenv("HOME")
+	}
 	s, err := m.spawner.Spawn(context.Background(), name, dir, mission, model, envOverrides)
 	if err != nil {
 		m.flash = "Spawn error: " + err.Error()
@@ -1873,7 +1934,11 @@ func (m tuiModel) View() string {
 	case modeNewName:
 		statusLine = "Name: " + m.newNameInput.View()
 	case modeNewDir:
-		statusLine = "Dir: " + m.newDirInput.View()
+		if m.creatingAgent {
+			statusLine = "Repo: " + m.newDirInput.View()
+		} else {
+			statusLine = "Dir: " + m.newDirInput.View()
+		}
 	case modeNewMission:
 		statusLine = "Mission: " + m.newMissionInput.View()
 	case modeNewModel:
@@ -1908,7 +1973,7 @@ func (m tuiModel) View() string {
 		if m.flash != "" {
 			statusLine = dimStyle.Render(m.flash)
 		} else {
-			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N smart-new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+G dir │ Alt+D delete") + "\n" +
+			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N smart-new │ Alt+C agent │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+G dir │ Alt+D delete") + "\n" +
 				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+X copy │ Alt+Q quit")
 		}
 	}

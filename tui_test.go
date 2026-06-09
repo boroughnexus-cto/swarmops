@@ -1119,6 +1119,15 @@ func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, mission *st
 	f.Sessions = append(f.Sessions, *s)
 	return s, nil
 }
+func (f *fakeSwarmClient) SpawnAgent(_ context.Context, name, repoPath, branch string, mission *string, taskBrief, model string, envOverrides map[string]string) (*Session, error) {
+	f.Calls = append(f.Calls, "SpawnAgent")
+	if f.SpawnErr != nil {
+		return nil, f.SpawnErr
+	}
+	s := &Session{ID: "fake-agent-id", Name: name, Directory: repoPath}
+	f.Sessions = append(f.Sessions, *s)
+	return s, nil
+}
 func (f *fakeSwarmClient) updateSessionDirectory(id, directory string) error {
 	f.Calls = append(f.Calls, "updateSessionDirectory:"+id)
 	return nil
@@ -1189,6 +1198,58 @@ func newFakeModel(client *fakeSwarmClient, sessions []Session) tuiModel {
 }
 
 // ─── Client-layer key-handler tests ─────────────────────────────────────────
+
+// TestAgentSpawnFlow drives the manual worktree-agent wizard: alt+c enters it,
+// and doSpawn routes to SpawnAgent (not the plain Spawn path), then resets state.
+func TestAgentSpawnFlow(t *testing.T) {
+	client := &fakeSwarmClient{}
+	m := newFakeModel(client, nil)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("c")})
+	m = updated.(tuiModel)
+	if !m.creatingAgent {
+		t.Fatal("alt+c should set creatingAgent")
+	}
+	if m.mode != modeNewName {
+		t.Fatalf("alt+c should enter modeNewName; got %v", m.mode)
+	}
+
+	m.newNameInput.SetValue("my-agent")
+	m.newDirInput.SetValue("/repo")
+	m.newMissionInput.SetValue("do the thing")
+	m.doSpawn()
+
+	if !hasFlag(client.Calls, "SpawnAgent") {
+		t.Errorf("agent-mode doSpawn should call SpawnAgent; calls=%v", client.Calls)
+	}
+	if hasFlag(client.Calls, "Spawn") {
+		t.Errorf("agent-mode doSpawn must not call the plain Spawn path; calls=%v", client.Calls)
+	}
+	if m.creatingAgent {
+		t.Error("creatingAgent should reset after doSpawn")
+	}
+	if m.mode != modePassthrough {
+		t.Errorf("doSpawn should return to passthrough; got %v", m.mode)
+	}
+}
+
+// TestAgentSpawnEscResets ensures cancelling the wizard clears creatingAgent so a
+// later plain "new session" can't accidentally inherit agent mode.
+func TestAgentSpawnEscResets(t *testing.T) {
+	client := &fakeSwarmClient{}
+	m := newFakeModel(client, nil)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("c")})
+	m = updated.(tuiModel)
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(tuiModel)
+	if m.creatingAgent {
+		t.Error("esc should reset creatingAgent")
+	}
+	if m.mode != modePassthrough {
+		t.Errorf("esc should return to passthrough; got %v", m.mode)
+	}
+}
 
 func TestHandleKey_DeleteSession(t *testing.T) {
 	sess := Session{ID: "sess-1", Name: "my-session"}
