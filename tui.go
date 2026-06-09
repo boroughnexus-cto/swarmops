@@ -98,6 +98,7 @@ type activityTickMsg time.Time // activity detection tick (1s)
 type flashClearMsg struct{}    // auto-clear flash message
 type quotaMsg struct{ data *QuotaData }
 type sessionsMsg []Session
+
 // terminalMsg carries a captured tmux pane. tmux is the session the capture came
 // from; the Update handler discards a terminalMsg whose tmux no longer matches the
 // selected session, so an out-of-order capture (e.g. issued before the user moved
@@ -167,7 +168,7 @@ type tuiModel struct {
 	// (worktree-isolated, like swop_spawn_agent) instead of a plain session.
 	// In agent mode the "directory" field is the git repo path.
 	creatingAgent bool
-	newModel        int // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
+	newModel      int // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
 	// Edit directory input
 	editDirInput textinput.Model
 

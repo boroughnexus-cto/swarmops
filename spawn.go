@@ -90,11 +90,11 @@ const (
 
 // interactiveClaudeOpts configures interactiveClaudeArgs.
 type interactiveClaudeOpts struct {
-	name      string               // session/display name → --remote-control <name>
+	name      string // session/display name → --remote-control <name>
 	mode      interactiveClaudeMode
-	sessionID string               // fresh: --session-id value; resume: --resume value (if valid UUID)
-	modelFlag string               // "" omits --model. Restore intentionally leaves this empty and supplies the model via the ANTHROPIC_MODEL env var instead (see restoreEnvFor).
-	mcpConfig string               // "" omits --strict-mcp-config/--mcp-config; else the per-session restricted MCP config path.
+	sessionID string // fresh: --session-id value; resume: --resume value (if valid UUID)
+	modelFlag string // "" omits --model. Restore intentionally leaves this empty and supplies the model via the ANTHROPIC_MODEL env var instead (see restoreEnvFor).
+	mcpConfig string // "" omits --strict-mcp-config/--mcp-config; else the per-session restricted MCP config path.
 }
 
 // interactiveClaudeArgs is the single source of truth for the argv of an
