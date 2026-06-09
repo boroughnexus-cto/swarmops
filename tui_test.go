@@ -614,7 +614,7 @@ func TestTerminalMsg_UpdatesContent(t *testing.T) {
 	items := []sidebarItem{fakeSessionItem("s", "running")}
 	m := newTestModel(items)
 
-	updated, _ := m.Update(terminalMsg("$ hello world\noutput here"))
+	updated, _ := m.Update(terminalMsg{tmux: "sw-s", content: "$ hello world\noutput here"})
 	m = updated.(tuiModel)
 
 	if m.termContent != "$ hello world\noutput here" {
@@ -622,6 +622,76 @@ func TestTerminalMsg_UpdatesContent(t *testing.T) {
 	}
 	if m.contentCache != m.termContent {
 		t.Errorf("contentCache should match termContent")
+	}
+}
+
+// TestZoomUnzoomNavRefreshesPreview reproduces the tmux-zoom freeze: after a
+// WindowSizeMsg pair (zoom then unzoom) the preview must still follow the cursor.
+// Navigation now clears the previous session's stale frame and re-captures, so the
+// preview never sticks on the prior session.
+func TestZoomUnzoomNavRefreshesPreview(t *testing.T) {
+	items := []sidebarItem{
+		fakeSessionItem("alpha", "running"),
+		fakeSessionItem("beta", "running"),
+	}
+	m := newTestModel(items)
+	step := func(msg tea.Msg) { u, _ := m.Update(msg); m = u.(tuiModel) }
+
+	step(tea.WindowSizeMsg{Width: 120, Height: 40})
+	step(terminalMsg{tmux: "sw-alpha", content: "ALPHA-CONTENT"})
+	if !strings.Contains(m.contentCache, "ALPHA-CONTENT") {
+		t.Fatalf("setup: preview should show alpha, got %q", m.contentCache)
+	}
+
+	// tmux zoom then unzoom — each fires a WindowSizeMsg.
+	step(tea.WindowSizeMsg{Width: 200, Height: 55})
+	step(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Navigate to beta. The stale alpha frame must be cleared immediately so the
+	// preview can't keep showing alpha (the bug).
+	step(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("z")})
+	if m.cursor != 1 {
+		t.Fatalf("alt+z should select beta (cursor 1), got %d", m.cursor)
+	}
+	if strings.Contains(m.contentCache, "ALPHA-CONTENT") {
+		t.Errorf("nav must clear the previous session's frame; cache still shows alpha: %q", m.contentCache)
+	}
+
+	// The fresh beta capture (delivered by the reload/tick) updates the preview.
+	step(terminalMsg{tmux: "sw-beta", content: "BETA-CONTENT"})
+	if !strings.Contains(m.contentCache, "BETA-CONTENT") {
+		t.Errorf("preview should follow cursor to beta, got %q", m.contentCache)
+	}
+	if !strings.Contains(m.vp.View(), "BETA-CONTENT") {
+		t.Errorf("viewport should render beta content, got %q", stripAnsi(m.vp.View()))
+	}
+}
+
+// TestTerminalMsg_DiscardsStaleCapture guards the async race the fix introduces:
+// a capture issued for the previously-selected session that lands after the user
+// has navigated away must NOT overwrite the now-selected session's preview.
+func TestTerminalMsg_DiscardsStaleCapture(t *testing.T) {
+	items := []sidebarItem{
+		fakeSessionItem("alpha", "running"),
+		fakeSessionItem("beta", "running"),
+	}
+	m := newTestModel(items)
+	step := func(msg tea.Msg) { u, _ := m.Update(msg); m = u.(tuiModel) }
+
+	step(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.cursor = 1 // beta selected
+	step(terminalMsg{tmux: "sw-beta", content: "BETA-CONTENT"})
+	if !strings.Contains(m.contentCache, "BETA-CONTENT") {
+		t.Fatalf("setup: beta should be shown, got %q", m.contentCache)
+	}
+
+	// A late capture for the no-longer-selected alpha must be dropped.
+	step(terminalMsg{tmux: "sw-alpha", content: "ALPHA-STALE"})
+	if strings.Contains(m.contentCache, "ALPHA-STALE") {
+		t.Errorf("stale capture for unselected session must be discarded, got %q", m.contentCache)
+	}
+	if !strings.Contains(m.contentCache, "BETA-CONTENT") {
+		t.Errorf("beta preview must be preserved, got %q", m.contentCache)
 	}
 }
 
@@ -1119,6 +1189,15 @@ func (f *fakeSwarmClient) Spawn(_ context.Context, name, dir string, mission *st
 	f.Sessions = append(f.Sessions, *s)
 	return s, nil
 }
+func (f *fakeSwarmClient) SpawnAgent(_ context.Context, name, repoPath, branch string, mission *string, taskBrief, model string, envOverrides map[string]string) (*Session, error) {
+	f.Calls = append(f.Calls, "SpawnAgent")
+	if f.SpawnErr != nil {
+		return nil, f.SpawnErr
+	}
+	s := &Session{ID: "fake-agent-id", Name: name, Directory: repoPath}
+	f.Sessions = append(f.Sessions, *s)
+	return s, nil
+}
 func (f *fakeSwarmClient) updateSessionDirectory(id, directory string) error {
 	f.Calls = append(f.Calls, "updateSessionDirectory:"+id)
 	return nil
@@ -1189,6 +1268,58 @@ func newFakeModel(client *fakeSwarmClient, sessions []Session) tuiModel {
 }
 
 // ─── Client-layer key-handler tests ─────────────────────────────────────────
+
+// TestAgentSpawnFlow drives the manual worktree-agent wizard: alt+c enters it,
+// and doSpawn routes to SpawnAgent (not the plain Spawn path), then resets state.
+func TestAgentSpawnFlow(t *testing.T) {
+	client := &fakeSwarmClient{}
+	m := newFakeModel(client, nil)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("c")})
+	m = updated.(tuiModel)
+	if !m.creatingAgent {
+		t.Fatal("alt+c should set creatingAgent")
+	}
+	if m.mode != modeNewName {
+		t.Fatalf("alt+c should enter modeNewName; got %v", m.mode)
+	}
+
+	m.newNameInput.SetValue("my-agent")
+	m.newDirInput.SetValue("/repo")
+	m.newMissionInput.SetValue("do the thing")
+	m.doSpawn()
+
+	if !hasFlag(client.Calls, "SpawnAgent") {
+		t.Errorf("agent-mode doSpawn should call SpawnAgent; calls=%v", client.Calls)
+	}
+	if hasFlag(client.Calls, "Spawn") {
+		t.Errorf("agent-mode doSpawn must not call the plain Spawn path; calls=%v", client.Calls)
+	}
+	if m.creatingAgent {
+		t.Error("creatingAgent should reset after doSpawn")
+	}
+	if m.mode != modePassthrough {
+		t.Errorf("doSpawn should return to passthrough; got %v", m.mode)
+	}
+}
+
+// TestAgentSpawnEscResets ensures cancelling the wizard clears creatingAgent so a
+// later plain "new session" can't accidentally inherit agent mode.
+func TestAgentSpawnEscResets(t *testing.T) {
+	client := &fakeSwarmClient{}
+	m := newFakeModel(client, nil)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("c")})
+	m = updated.(tuiModel)
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(tuiModel)
+	if m.creatingAgent {
+		t.Error("esc should reset creatingAgent")
+	}
+	if m.mode != modePassthrough {
+		t.Errorf("esc should return to passthrough; got %v", m.mode)
+	}
+}
 
 func TestHandleKey_DeleteSession(t *testing.T) {
 	sess := Session{ID: "sess-1", Name: "my-session"}

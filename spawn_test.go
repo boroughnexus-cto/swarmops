@@ -1,9 +1,102 @@
 package main
 
 import (
+	"context"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+// TestInteractiveClaudeArgsGolden pins the exact argv produced by the shared
+// builder for the fresh and resume modes, so any change to flag content or
+// ordering is deliberate (and shows up as a test diff). The pre-refactor
+// hand-rolled builders produced exactly these sequences.
+func TestInteractiveClaudeArgsGolden(t *testing.T) {
+	t.Setenv("SWARMOPS_DISABLE_REMOTE_CONTROL", "") // force Remote Control on
+	uuid := generateUUID()
+
+	tests := []struct {
+		name string
+		opts interactiveClaudeOpts
+		want []string
+	}{
+		{
+			name: "fresh spawn with model + restricted mcp",
+			opts: interactiveClaudeOpts{name: "task-a", mode: claudeFresh, sessionID: uuid, modelFlag: "opus", mcpConfig: "/cfg.json"},
+			want: []string{"claude", "--remote-control", "task-a", "--session-id", uuid, dangerouslySkipPermissions, "--strict-mcp-config", "--mcp-config", "/cfg.json", "--model", "opus"},
+		},
+		{
+			name: "fresh spawn no model no mcp (default model path)",
+			opts: interactiveClaudeOpts{name: "task-b", mode: claudeFresh, sessionID: uuid},
+			want: []string{"claude", "--remote-control", "task-b", "--session-id", uuid, dangerouslySkipPermissions},
+		},
+		{
+			name: "resume restore: mcp, model via env (modelFlag empty)",
+			opts: interactiveClaudeOpts{name: "task-c", mode: claudeResume, sessionID: uuid, mcpConfig: "/cfg.json"},
+			want: []string{"claude", "--remote-control", "task-c", dangerouslySkipPermissions, "--resume", uuid, "--strict-mcp-config", "--mcp-config", "/cfg.json"},
+		},
+		{
+			name: "resume TUI: model flag, no mcp",
+			opts: interactiveClaudeOpts{name: "task-d", mode: claudeResume, sessionID: uuid, modelFlag: "sonnet"},
+			want: []string{"claude", "--remote-control", "task-d", dangerouslySkipPermissions, "--resume", uuid, "--model", "sonnet"},
+		},
+		{
+			name: "resume with legacy non-UUID id omits --resume",
+			opts: interactiveClaudeOpts{name: "task-e", mode: claudeResume, sessionID: "legacy-abc", modelFlag: "opus"},
+			want: []string{"claude", "--remote-control", "task-e", dangerouslySkipPermissions, "--model", "opus"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := interactiveClaudeArgs(tc.opts)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("argv mismatch\n got: %v\nwant: %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestInteractiveClaudeArgsInvariants is the structural guarantee behind the
+// TUI/MCP parity requirement: EVERY interactive path emits
+// --dangerously-skip-permissions, and Remote Control is on unless the documented
+// SWARMOPS_DISABLE_REMOTE_CONTROL kill-switch is set (the one allowed exception).
+func TestInteractiveClaudeArgsInvariants(t *testing.T) {
+	uuid := generateUUID()
+	// Mirrors every real call site: spawn (fresh), alt+S restart (fresh+forced
+	// model), restore (resume+mcp, env model), TUI resume / StartSession (resume).
+	callSites := []interactiveClaudeOpts{
+		{name: "spawn", mode: claudeFresh, sessionID: uuid, modelFlag: "sonnet", mcpConfig: "/c.json"},
+		{name: "altS", mode: claudeFresh, sessionID: uuid, modelFlag: "sonnet"},
+		{name: "restore", mode: claudeResume, sessionID: uuid, mcpConfig: "/c.json"},
+		{name: "resume", mode: claudeResume, sessionID: uuid, modelFlag: "opus"},
+	}
+
+	t.Run("skip-permissions always present", func(t *testing.T) {
+		t.Setenv("SWARMOPS_DISABLE_REMOTE_CONTROL", "")
+		for _, o := range callSites {
+			args := interactiveClaudeArgs(o)
+			if !hasFlag(args, dangerouslySkipPermissions) {
+				t.Errorf("%s: missing %s; got %v", o.name, dangerouslySkipPermissions, args)
+			}
+			if !hasFlag(args, "--remote-control") {
+				t.Errorf("%s: Remote Control must be on by default; got %v", o.name, args)
+			}
+		}
+	})
+
+	t.Run("kill-switch disables only Remote Control, never skip-permissions", func(t *testing.T) {
+		t.Setenv("SWARMOPS_DISABLE_REMOTE_CONTROL", "1")
+		for _, o := range callSites {
+			args := interactiveClaudeArgs(o)
+			if hasFlag(args, "--remote-control") {
+				t.Errorf("%s: kill-switch should drop Remote Control; got %v", o.name, args)
+			}
+			if !hasFlag(args, dangerouslySkipPermissions) {
+				t.Errorf("%s: skip-permissions must survive the RC kill-switch; got %v", o.name, args)
+			}
+		}
+	})
+}
 
 func TestEffectiveModel(t *testing.T) {
 	t.Setenv("SWARMOPS_DEFAULT_MODEL", "")
@@ -69,6 +162,25 @@ func TestRemoteControlArgs(t *testing.T) {
 		if got := remoteControlArgs(n); len(got) != 1 || got[0] != "--remote-control" {
 			t.Errorf("bare fallback for %q: got %v", n, got)
 		}
+	}
+}
+
+// TestCreateSessionNilDBGuard verifies the spawn path fails with a clear error
+// (rather than panicking inside database/sql) when the global database is unset —
+// the footgun of a TUI running with the in-process defaultSpawner instead of in
+// client mode. spawnSession funnels through createSession, so guarding it here
+// protects every spawn caller.
+func TestCreateSessionNilDBGuard(t *testing.T) {
+	prev := database
+	database = nil
+	defer func() { database = prev }()
+
+	_, err := createSession(context.Background(), "x", "/tmp", nil, false, "")
+	if err == nil {
+		t.Fatal("createSession with nil database should return an error, not nil")
+	}
+	if !strings.Contains(err.Error(), "database not initialized") {
+		t.Errorf("expected a clear nil-DB error, got: %v", err)
 	}
 }
 

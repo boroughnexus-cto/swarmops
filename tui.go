@@ -98,7 +98,15 @@ type activityTickMsg time.Time // activity detection tick (1s)
 type flashClearMsg struct{}    // auto-clear flash message
 type quotaMsg struct{ data *QuotaData }
 type sessionsMsg []Session
-type terminalMsg string
+
+// terminalMsg carries a captured tmux pane. tmux is the session the capture came
+// from; the Update handler discards a terminalMsg whose tmux no longer matches the
+// selected session, so an out-of-order capture (e.g. issued before the user moved
+// the cursor) can never overwrite the preview of a different session.
+type terminalMsg struct {
+	tmux    string
+	content string
+}
 type itemsMsg struct {
 	items    []sidebarItem
 	captures []sessionCapture
@@ -156,7 +164,11 @@ type tuiModel struct {
 	newNameInput    textinput.Model
 	newDirInput     textinput.Model
 	newMissionInput textinput.Model
-	newModel        int // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
+	// creatingAgent routes the name→dir→mission→model wizard to SpawnAgent
+	// (worktree-isolated, like swop_spawn_agent) instead of a plain session.
+	// In agent mode the "directory" field is the git repo path.
+	creatingAgent bool
+	newModel      int // 0=default, 1=haiku, 2=sonnet, 3=opus, 4=deepseek, 5=openai
 	// Edit directory input
 	editDirInput textinput.Model
 
@@ -527,9 +539,9 @@ func loadTerminal(tmuxName string) tea.Cmd {
 	return func() tea.Msg {
 		content, err := captureTerminal(tmuxName)
 		if err != nil {
-			return terminalMsg("(error: " + err.Error() + ")")
+			return terminalMsg{tmux: tmuxName, content: "(error: " + err.Error() + ")"}
 		}
-		return terminalMsg(content)
+		return terminalMsg{tmux: tmuxName, content: content}
 	}
 }
 
@@ -586,8 +598,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeTmuxSessions(contentWidth, contentHeight)
 		m.vp.MouseWheelEnabled = true
 		m.vpReady = true
-		m.updateContentCache()
-		return m, nil
+		// Re-capture the selected session immediately so the preview is correct
+		// right after a tmux zoom/unzoom (which fires WindowSizeMsg), rather than
+		// showing the pre-resize frame until the next 150ms tick.
+		cmd := m.reloadSelected()
+		return m, cmd
 
 	case tickMsg:
 		// Fast tick (150ms): animation frames + terminal refresh only
@@ -693,7 +708,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case terminalMsg:
-		m.termContent = string(msg)
+		// Discard captures from a session that is no longer selected. Without this,
+		// a capture issued for session A (by the 150ms tick or a nav reload) can land
+		// after the cursor has moved to B and overwrite B's preview with A's frame.
+		// An empty tmux tag is always accepted (legacy/test-injected content).
+		if msg.tmux != "" && msg.tmux != m.selectedTmux() {
+			return m, nil
+		}
+		m.termContent = msg.content
 		m.contentCache = m.termContent
 		if m.vpReady {
 			m.vp.SetContent(m.contentCache)
@@ -837,16 +859,16 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 				m.flash = ""
-				m.userScrolled = false
-				m.updateContentCache()
+				cmd := m.reloadSelected()
+				return m, cmd
 			}
 			return m, nil
 		case "alt+z":
 			if m.cursor < len(m.items)-1 {
 				m.cursor++
 				m.flash = ""
-				m.userScrolled = false
-				m.updateContentCache()
+				cmd := m.reloadSelected()
+				return m, cmd
 			}
 			return m, nil
 		case "alt+x":
@@ -865,6 +887,20 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.goalInput.SetValue("")
 			m.goalInput.Focus()
 			m.flash = "Smart session — describe your goal (Enter to submit, Esc to cancel)"
+			return m, textinput.Blink
+		case "alt+c":
+			// New worktree agent (manual): name → repo path → mission → model,
+			// then SpawnAgent. The TUI equivalent of MCP swop_spawn_agent.
+			if m.api == nil {
+				m.flash = "Agent spawn needs the backend (client mode)"
+				return m, flashClearCmd()
+			}
+			m.creatingAgent = true
+			m.mode = modeNewName
+			m.newNameInput.SetValue("")
+			m.newNameInput.Focus()
+			m.newDirInput.SetValue("")
+			m.flash = "New worktree agent — enter name (esc to cancel)"
 			return m, textinput.Blink
 		case "alt+d":
 			if m.cursor < len(m.items) && m.items[m.cursor].kind == itemSession {
@@ -939,9 +975,15 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					time.Sleep(500 * time.Millisecond)
 					// Fresh native claude session (new session-id = no history).
 					newID := generateUUID()
-					parts := []string{"claude"}
-					parts = append(parts, remoteControlArgs(item.label)...)
-					parts = append(parts, "--session-id", newID, "--dangerously-skip-permissions", "--model", effectiveModel(item.model))
+					// effectiveModel resolves a concrete model so a fresh restart
+					// never falls back to claude's own (expensive) default — this
+					// is the one fresh path that always pins --model.
+					parts := interactiveClaudeArgs(interactiveClaudeOpts{
+						name:      item.label,
+						mode:      claudeFresh,
+						sessionID: newID,
+						modelFlag: effectiveModel(item.model),
+					})
 					exec.Command("tmux", "send-keys", "-t", item.tmuxSession, strings.Join(parts, " "), "Enter").Run()
 					updateClaudeSessionID(context.Background(), item.sessionID, newID)
 					m.flash = fmt.Sprintf("Restarted Claude in %s", item.label)
@@ -1034,9 +1076,8 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				item := m.items[idx]
 				if item.kind == itemSession && item.activity == "awaiting_input" {
 					m.cursor = idx
-					m.userScrolled = false
-					m.updateContentCache()
-					break
+					cmd := m.reloadSelected()
+					return m, cmd
 				}
 			}
 			return m, nil
@@ -1095,10 +1136,15 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.newNameInput.Value() != "" {
 				m.mode = modeNewDir
 				m.newDirInput.Focus()
-				m.flash = "New session — enter directory (esc to cancel)"
+				if m.creatingAgent {
+					m.flash = "New agent — enter git repo path (tab to complete, esc to cancel)"
+				} else {
+					m.flash = "New session — enter directory (esc to cancel)"
+				}
 				return m, textinput.Blink
 			}
 		case "esc":
+			m.creatingAgent = false
 			m.mode = modePassthrough
 			m.flash = ""
 		default:
@@ -1113,9 +1159,14 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNewMission
 			m.newMissionInput.SetValue("")
 			m.newMissionInput.Focus()
-			m.flash = "Mission statement (optional, enter to skip)"
+			if m.creatingAgent {
+				m.flash = "Agent mission / task brief (written to TASK.md; enter to skip)"
+			} else {
+				m.flash = "Mission statement (optional, enter to skip)"
+			}
 			return m, textinput.Blink
 		case "esc":
+			m.creatingAgent = false
 			m.mode = modePassthrough
 			m.flash = ""
 		case "tab":
@@ -1173,6 +1224,7 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.flash = modelPickerFlash(m.newModel)
 			return m, nil
 		case "esc":
+			m.creatingAgent = false
 			m.mode = modePassthrough
 			m.flash = ""
 		default:
@@ -1197,8 +1249,9 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "enter":
 			m.doSpawn()
-			return m, nil
+			return m, tea.Batch(loadItemsCmd(m.api), flashClearCmd())
 		case "esc":
+			m.creatingAgent = false
 			m.mode = modePassthrough
 			m.flash = ""
 		}
@@ -1640,11 +1693,13 @@ func (m *tuiModel) sendKeyToSession(key string) {
 }
 
 func (m *tuiModel) doSpawn() {
+	defer func() {
+		m.creatingAgent = false
+		m.mode = modePassthrough
+	}()
+
 	name := m.newNameInput.Value()
 	dir := m.newDirInput.Value()
-	if dir == "" {
-		dir = os.Getenv("HOME")
-	}
 	var mission *string
 	if v := m.newMissionInput.Value(); v != "" {
 		mission = &v
@@ -1652,6 +1707,35 @@ func (m *tuiModel) doSpawn() {
 	model := modelIDFromIndex(m.newModel)
 	envOverrides := envOverridesFromIndex(m.newModel)
 	name = autoPrefixSessionName(name, model, envOverrides)
+
+	if m.creatingAgent {
+		// Worktree-isolated agent: the "directory" field is the git repo path,
+		// and the mission doubles as the TASK.md brief so the agent has its
+		// instructions on disk. Mirrors MCP swop_spawn_agent.
+		if dir == "" {
+			m.flash = "Agent needs a git repo path"
+			return
+		}
+		if m.api == nil {
+			m.flash = "Agent spawn needs the backend (client mode)"
+			return
+		}
+		taskBrief := ""
+		if mission != nil {
+			taskBrief = *mission
+		}
+		s, err := m.api.SpawnAgent(context.Background(), name, dir, "", mission, taskBrief, model, envOverrides)
+		if err != nil {
+			m.flash = "Agent spawn error: " + err.Error()
+		} else {
+			m.flash = fmt.Sprintf("Spawned agent %s", s.Name)
+		}
+		return
+	}
+
+	if dir == "" {
+		dir = os.Getenv("HOME")
+	}
 	s, err := m.spawner.Spawn(context.Background(), name, dir, mission, model, envOverrides)
 	if err != nil {
 		m.flash = "Spawn error: " + err.Error()
@@ -1867,7 +1951,11 @@ func (m tuiModel) View() string {
 	case modeNewName:
 		statusLine = "Name: " + m.newNameInput.View()
 	case modeNewDir:
-		statusLine = "Dir: " + m.newDirInput.View()
+		if m.creatingAgent {
+			statusLine = "Repo: " + m.newDirInput.View()
+		} else {
+			statusLine = "Dir: " + m.newDirInput.View()
+		}
 	case modeNewMission:
 		statusLine = "Mission: " + m.newMissionInput.View()
 	case modeNewModel:
@@ -1902,7 +1990,7 @@ func (m tuiModel) View() string {
 		if m.flash != "" {
 			statusLine = dimStyle.Render(m.flash)
 		} else {
-			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N smart-new │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+G dir │ Alt+D delete") + "\n" +
+			statusLine = dimStyle.Render("Alt+A/Z nav │ Alt+N smart-new │ Alt+C agent │ Alt+S start/stop │ Alt+R rename │ Alt+M mission │ Alt+G dir │ Alt+D delete") + "\n" +
 				dimStyle.Render("Alt+P plane │ Alt+I icinga │ Alt+L audit │ Alt+W close issue │ Alt+E escalations │ Alt+O pool │ Alt+F feedback │ Alt+X copy │ Alt+Q quit")
 		}
 	}
@@ -2130,6 +2218,42 @@ func (m tuiModel) renderSidebar() string {
 		sideHeight = 3
 	}
 	return m.sidebarStyle().Height(sideHeight).Render(strings.Join(lines, "\n"))
+}
+
+// selectedTmux returns the tmux session name of the currently-selected item, or
+// "" if the selection is not a session (pool slot, or empty list).
+func (m tuiModel) selectedTmux() string {
+	if m.cursor >= 0 && m.cursor < len(m.items) {
+		item := m.items[m.cursor]
+		if item.kind == itemSession {
+			return item.tmuxSession
+		}
+	}
+	return ""
+}
+
+// reloadSelected refreshes the preview for the currently-selected item and
+// returns a command that captures its terminal immediately (so the preview
+// follows the cursor without waiting for the next 150ms tick). For a running
+// session it first clears the stale cached frame — which belongs to the
+// previously-selected session — so the preview never shows another session's
+// screen while the fresh capture is in flight. Called on navigation and after a
+// window resize (tmux zoom/unzoom).
+func (m *tuiModel) reloadSelected() tea.Cmd {
+	m.userScrolled = false
+	if m.cursor >= 0 && m.cursor < len(m.items) {
+		item := m.items[m.cursor]
+		if item.kind == itemSession && item.status == "running" {
+			m.contentCache = ""
+			if m.vpReady {
+				m.vp.SetContent("")
+				m.vp.GotoTop()
+			}
+			return loadTerminal(item.tmuxSession)
+		}
+	}
+	m.updateContentCache()
+	return nil
 }
 
 // updateContentCache computes the right-pane content string based on current state
@@ -2527,16 +2651,12 @@ func swapNestedTmuxPrefix() (func(), func()) {
 // non-UUID id (legacy) start a fresh conversation — their history is still on
 // disk and can be reopened with /resume in-session.
 func resumeClaudeCmd(claudeID, model, name string) []string {
-	args := []string{"claude"}
-	args = append(args, remoteControlArgs(name)...)
-	args = append(args, "--dangerously-skip-permissions")
-	if claudeID != "" && isValidUUID(claudeID) {
-		args = append(args, "--resume", claudeID)
-	}
-	if model != "" {
-		args = append(args, "--model", model)
-	}
-	return args
+	return interactiveClaudeArgs(interactiveClaudeOpts{
+		name:      name,
+		mode:      claudeResume,
+		sessionID: claudeID,
+		modelFlag: model,
+	})
 }
 
 func sidebarWidthPath() string {

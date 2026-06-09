@@ -358,6 +358,8 @@ func handleSwarmSubAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 		handlePoolStatusAPI(w, r)
 	case "sessions":
 		handleSwarmSessionsAPI(w, r, ctx, pathParts[1:])
+	case "agents":
+		handleSwarmAgentsAPI(w, r, ctx)
 	case "dashboard":
 		handleSwarmDashboardAPI(w, r, ctx)
 	case "tasks":
@@ -386,6 +388,45 @@ func handleSwarmAuditAPI(w http.ResponseWriter, r *http.Request, ctx context.Con
 		events = []ManagedSessionEvent{}
 	}
 	json.NewEncoder(w).Encode(events)
+}
+
+// handleSwarmAgentsAPI handles POST /api/swarm/agents — create a worktree-isolated
+// agent (the REST/TUI equivalent of the MCP swop_spawn_agent tool). repo_path is
+// required; worktree_path and branch auto-generate when empty.
+func handleSwarmAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if globalServices == nil {
+		http.Error(w, `{"error":"services unavailable"}`, http.StatusServiceUnavailable)
+		return
+	}
+	var req struct {
+		Name         string            `json:"name"`
+		RepoPath     string            `json:"repo_path"`
+		WorktreePath string            `json:"worktree_path"`
+		Branch       string            `json:"branch"`
+		Mission      *string           `json:"mission"`
+		Model        string            `json:"model"`
+		TaskBrief    string            `json:"task_brief"`
+		EnvOverrides map[string]string `json:"env_overrides"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		return
+	}
+	if req.RepoPath == "" {
+		http.Error(w, `{"error":"repo_path required"}`, http.StatusBadRequest)
+		return
+	}
+	s, err := globalServices.SpawnAgent(ctx, req.Name, req.RepoPath, req.WorktreePath, req.Branch, req.Mission, req.Model, req.TaskBrief, req.EnvOverrides)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(s)
 }
 
 func handleSwarmSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
