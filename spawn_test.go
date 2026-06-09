@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -161,6 +162,25 @@ func TestRemoteControlArgs(t *testing.T) {
 		if got := remoteControlArgs(n); len(got) != 1 || got[0] != "--remote-control" {
 			t.Errorf("bare fallback for %q: got %v", n, got)
 		}
+	}
+}
+
+// TestCreateSessionNilDBGuard verifies the spawn path fails with a clear error
+// (rather than panicking inside database/sql) when the global database is unset —
+// the footgun of a TUI running with the in-process defaultSpawner instead of in
+// client mode. spawnSession funnels through createSession, so guarding it here
+// protects every spawn caller.
+func TestCreateSessionNilDBGuard(t *testing.T) {
+	prev := database
+	database = nil
+	defer func() { database = prev }()
+
+	_, err := createSession(context.Background(), "x", "/tmp", nil, false, "")
+	if err == nil {
+		t.Fatal("createSession with nil database should return an error, not nil")
+	}
+	if !strings.Contains(err.Error(), "database not initialized") {
+		t.Errorf("expected a clear nil-DB error, got: %v", err)
 	}
 }
 

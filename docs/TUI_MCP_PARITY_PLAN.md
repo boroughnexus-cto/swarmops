@@ -1,6 +1,6 @@
 # TUI / MCP Session Parity — Audit & Plan
 
-**Status:** Part A (fragility fix) **implemented** in this PR; Parts B–D remain proposals.
+**Status:** Parts A (fragility fix) and C (nil-DB guard) **implemented** in this PR; Parts B and D remain proposals.
 **Author:** automated audit
 **Scope:** Unify TUI-created and MCP-created SwarmOps sessions per Simon's 5 requirements.
 
@@ -9,7 +9,9 @@
 > interactive paths now route through a single `interactiveClaudeArgs` helper, and
 > the `--dangerously-skip-permissions` literal lives in exactly one `const`. Golden
 > + invariant tests pin the behaviour. See **Part A** (marked ✅ DONE) for details.
-> Parts B (TUI worktree spawn), C (nil-DB spawner guard), and D (docs) are still
+> Part C (nil-DB spawner guard) is also **fixed** — `createSession` now returns a
+> clear error instead of panicking when the global database is unset, closing the
+> in-process-spawner footgun. Parts B (TUI worktree spawn) and D (docs) remain
 > open proposals.
 
 ---
@@ -155,14 +157,20 @@ real behavioral gap.
 MCP-/automation-only feature, skip B and instead document that the TUI intentionally creates
 in-place (non-worktree) sessions.
 
-### C. (Hardening) Make the in-process spawner path safe or remove it
+### C. (Hardening) Make the in-process spawner path safe or remove it — ✅ DONE in this PR
 `initialModel` falls back to `defaultSpawner{}` when `api == nil` (`tui.go:292–297`). In a real client
-TUI that path would call `spawnSession` against a nil global `database` and panic. It is currently
-only reached by tests, but it's a latent footgun that contradicts "one path."
+TUI that path would call `spawnSession` against a nil global `database` and panic. It is effectively
+dead today (`runTUIClient` always passes a non-nil `*apiClient`, and the only test caller passes a
+non-nil fake), but it was a latent footgun that contradicts "one path."
 
-**Change:** either (i) delete the `defaultSpawner` fallback and require a non-nil client (tests inject
-`fakeSwarmClient`), or (ii) guard `spawnSession`/`createSession` with a clear error when `database == nil`.
-Low effort, removes ambiguity about "which path runs."
+**As implemented (this PR):** chose option (ii) — the defence-in-depth guard. `createSession`
+(`session.go`) now returns `"database not initialized (TUI must run in client mode against a
+backend)"` when `database == nil`, consistent with the nil-DB guards already present on its siblings
+in `session.go`. Because `spawnSession` funnels through `createSession`, this protects **every** spawn
+caller (TUI in-process fallback, `RunTask`, `SpawnAgent`) and converts a deep `database/sql` panic
+into a clear, surfaced error. `TestCreateSessionNilDBGuard` pins it. (Option (i) — deleting
+`defaultSpawner` outright — was not taken: it's a larger change to the TUI's test seams for no extra
+safety once the DB layer is guarded.)
 
 ### D. (Docs) Record what is intentionally not unified
 Add a short note (in `README.md` or `SWARMOPS_V3_PLAN.md`) stating that **pool workers** (`claude -p`,

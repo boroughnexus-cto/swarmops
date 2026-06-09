@@ -88,6 +88,15 @@ func generateID() string {
 }
 
 func createSession(ctx context.Context, name, directory string, mission *string, hidden bool, model string) (*Session, error) {
+	// Guard the nil-DB case explicitly. createSession is the first DB touch in
+	// spawnSession, so a nil database here would otherwise panic deep inside
+	// database/sql. This converts that into a clear error — the relevant case is
+	// a TUI accidentally running with an in-process spawner (defaultSpawner)
+	// instead of in client mode against a backend that owns the database.
+	if database == nil {
+		return nil, fmt.Errorf("database not initialized (TUI must run in client mode against a backend)")
+	}
+
 	id := generateID()
 	tmuxName := "sw-" + id
 	now := time.Now().Unix()
