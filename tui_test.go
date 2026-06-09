@@ -614,7 +614,7 @@ func TestTerminalMsg_UpdatesContent(t *testing.T) {
 	items := []sidebarItem{fakeSessionItem("s", "running")}
 	m := newTestModel(items)
 
-	updated, _ := m.Update(terminalMsg("$ hello world\noutput here"))
+	updated, _ := m.Update(terminalMsg{tmux: "sw-s", content: "$ hello world\noutput here"})
 	m = updated.(tuiModel)
 
 	if m.termContent != "$ hello world\noutput here" {
@@ -622,6 +622,76 @@ func TestTerminalMsg_UpdatesContent(t *testing.T) {
 	}
 	if m.contentCache != m.termContent {
 		t.Errorf("contentCache should match termContent")
+	}
+}
+
+// TestZoomUnzoomNavRefreshesPreview reproduces the tmux-zoom freeze: after a
+// WindowSizeMsg pair (zoom then unzoom) the preview must still follow the cursor.
+// Navigation now clears the previous session's stale frame and re-captures, so the
+// preview never sticks on the prior session.
+func TestZoomUnzoomNavRefreshesPreview(t *testing.T) {
+	items := []sidebarItem{
+		fakeSessionItem("alpha", "running"),
+		fakeSessionItem("beta", "running"),
+	}
+	m := newTestModel(items)
+	step := func(msg tea.Msg) { u, _ := m.Update(msg); m = u.(tuiModel) }
+
+	step(tea.WindowSizeMsg{Width: 120, Height: 40})
+	step(terminalMsg{tmux: "sw-alpha", content: "ALPHA-CONTENT"})
+	if !strings.Contains(m.contentCache, "ALPHA-CONTENT") {
+		t.Fatalf("setup: preview should show alpha, got %q", m.contentCache)
+	}
+
+	// tmux zoom then unzoom — each fires a WindowSizeMsg.
+	step(tea.WindowSizeMsg{Width: 200, Height: 55})
+	step(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Navigate to beta. The stale alpha frame must be cleared immediately so the
+	// preview can't keep showing alpha (the bug).
+	step(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune("z")})
+	if m.cursor != 1 {
+		t.Fatalf("alt+z should select beta (cursor 1), got %d", m.cursor)
+	}
+	if strings.Contains(m.contentCache, "ALPHA-CONTENT") {
+		t.Errorf("nav must clear the previous session's frame; cache still shows alpha: %q", m.contentCache)
+	}
+
+	// The fresh beta capture (delivered by the reload/tick) updates the preview.
+	step(terminalMsg{tmux: "sw-beta", content: "BETA-CONTENT"})
+	if !strings.Contains(m.contentCache, "BETA-CONTENT") {
+		t.Errorf("preview should follow cursor to beta, got %q", m.contentCache)
+	}
+	if !strings.Contains(m.vp.View(), "BETA-CONTENT") {
+		t.Errorf("viewport should render beta content, got %q", stripAnsi(m.vp.View()))
+	}
+}
+
+// TestTerminalMsg_DiscardsStaleCapture guards the async race the fix introduces:
+// a capture issued for the previously-selected session that lands after the user
+// has navigated away must NOT overwrite the now-selected session's preview.
+func TestTerminalMsg_DiscardsStaleCapture(t *testing.T) {
+	items := []sidebarItem{
+		fakeSessionItem("alpha", "running"),
+		fakeSessionItem("beta", "running"),
+	}
+	m := newTestModel(items)
+	step := func(msg tea.Msg) { u, _ := m.Update(msg); m = u.(tuiModel) }
+
+	step(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.cursor = 1 // beta selected
+	step(terminalMsg{tmux: "sw-beta", content: "BETA-CONTENT"})
+	if !strings.Contains(m.contentCache, "BETA-CONTENT") {
+		t.Fatalf("setup: beta should be shown, got %q", m.contentCache)
+	}
+
+	// A late capture for the no-longer-selected alpha must be dropped.
+	step(terminalMsg{tmux: "sw-alpha", content: "ALPHA-STALE"})
+	if strings.Contains(m.contentCache, "ALPHA-STALE") {
+		t.Errorf("stale capture for unselected session must be discarded, got %q", m.contentCache)
+	}
+	if !strings.Contains(m.contentCache, "BETA-CONTENT") {
+		t.Errorf("beta preview must be preserved, got %q", m.contentCache)
 	}
 }
 

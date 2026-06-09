@@ -98,7 +98,14 @@ type activityTickMsg time.Time // activity detection tick (1s)
 type flashClearMsg struct{}    // auto-clear flash message
 type quotaMsg struct{ data *QuotaData }
 type sessionsMsg []Session
-type terminalMsg string
+// terminalMsg carries a captured tmux pane. tmux is the session the capture came
+// from; the Update handler discards a terminalMsg whose tmux no longer matches the
+// selected session, so an out-of-order capture (e.g. issued before the user moved
+// the cursor) can never overwrite the preview of a different session.
+type terminalMsg struct {
+	tmux    string
+	content string
+}
 type itemsMsg struct {
 	items    []sidebarItem
 	captures []sessionCapture
@@ -531,9 +538,9 @@ func loadTerminal(tmuxName string) tea.Cmd {
 	return func() tea.Msg {
 		content, err := captureTerminal(tmuxName)
 		if err != nil {
-			return terminalMsg("(error: " + err.Error() + ")")
+			return terminalMsg{tmux: tmuxName, content: "(error: " + err.Error() + ")"}
 		}
-		return terminalMsg(content)
+		return terminalMsg{tmux: tmuxName, content: content}
 	}
 }
 
@@ -590,8 +597,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeTmuxSessions(contentWidth, contentHeight)
 		m.vp.MouseWheelEnabled = true
 		m.vpReady = true
-		m.updateContentCache()
-		return m, nil
+		// Re-capture the selected session immediately so the preview is correct
+		// right after a tmux zoom/unzoom (which fires WindowSizeMsg), rather than
+		// showing the pre-resize frame until the next 150ms tick.
+		cmd := m.reloadSelected()
+		return m, cmd
 
 	case tickMsg:
 		// Fast tick (150ms): animation frames + terminal refresh only
@@ -697,7 +707,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case terminalMsg:
-		m.termContent = string(msg)
+		// Discard captures from a session that is no longer selected. Without this,
+		// a capture issued for session A (by the 150ms tick or a nav reload) can land
+		// after the cursor has moved to B and overwrite B's preview with A's frame.
+		// An empty tmux tag is always accepted (legacy/test-injected content).
+		if msg.tmux != "" && msg.tmux != m.selectedTmux() {
+			return m, nil
+		}
+		m.termContent = msg.content
 		m.contentCache = m.termContent
 		if m.vpReady {
 			m.vp.SetContent(m.contentCache)
@@ -841,16 +858,16 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 				m.flash = ""
-				m.userScrolled = false
-				m.updateContentCache()
+				cmd := m.reloadSelected()
+				return m, cmd
 			}
 			return m, nil
 		case "alt+z":
 			if m.cursor < len(m.items)-1 {
 				m.cursor++
 				m.flash = ""
-				m.userScrolled = false
-				m.updateContentCache()
+				cmd := m.reloadSelected()
+				return m, cmd
 			}
 			return m, nil
 		case "alt+x":
@@ -1058,9 +1075,8 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				item := m.items[idx]
 				if item.kind == itemSession && item.activity == "awaiting_input" {
 					m.cursor = idx
-					m.userScrolled = false
-					m.updateContentCache()
-					break
+					cmd := m.reloadSelected()
+					return m, cmd
 				}
 			}
 			return m, nil
@@ -2201,6 +2217,42 @@ func (m tuiModel) renderSidebar() string {
 		sideHeight = 3
 	}
 	return m.sidebarStyle().Height(sideHeight).Render(strings.Join(lines, "\n"))
+}
+
+// selectedTmux returns the tmux session name of the currently-selected item, or
+// "" if the selection is not a session (pool slot, or empty list).
+func (m tuiModel) selectedTmux() string {
+	if m.cursor >= 0 && m.cursor < len(m.items) {
+		item := m.items[m.cursor]
+		if item.kind == itemSession {
+			return item.tmuxSession
+		}
+	}
+	return ""
+}
+
+// reloadSelected refreshes the preview for the currently-selected item and
+// returns a command that captures its terminal immediately (so the preview
+// follows the cursor without waiting for the next 150ms tick). For a running
+// session it first clears the stale cached frame — which belongs to the
+// previously-selected session — so the preview never shows another session's
+// screen while the fresh capture is in flight. Called on navigation and after a
+// window resize (tmux zoom/unzoom).
+func (m *tuiModel) reloadSelected() tea.Cmd {
+	m.userScrolled = false
+	if m.cursor >= 0 && m.cursor < len(m.items) {
+		item := m.items[m.cursor]
+		if item.kind == itemSession && item.status == "running" {
+			m.contentCache = ""
+			if m.vpReady {
+				m.vp.SetContent("")
+				m.vp.GotoTop()
+			}
+			return loadTerminal(item.tmuxSession)
+		}
+	}
+	m.updateContentCache()
+	return nil
 }
 
 // updateContentCache computes the right-pane content string based on current state
